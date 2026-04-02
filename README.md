@@ -48,3 +48,66 @@ Join our community of developers creating universal apps.
 
 - [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
 - [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+
+
+# MEAL PLAN
+## DATABASE MODEL
+```mermaid
+erDiagram
+  dishes {
+    uuid id PK
+    text house_code
+    text name
+    timestamp created_at
+  }
+  ingredients {
+    uuid id PK
+    text house_code
+    text name
+  }
+  dish_ingredients {
+    uuid id PK
+    uuid dish_id FK
+    uuid ingredient_id FK
+    numeric quantity
+    text unit
+  }
+  weeks {
+    uuid id PK
+    text house_code
+    int year
+    int week_number
+  }
+  week_plan {
+    uuid id PK
+    text house_code
+    uuid week_id FK
+    text day
+    text slot
+    uuid dish_id FK
+  }
+  dishes ||--o{ dish_ingredients : "has"
+  ingredients ||--o{ dish_ingredients : "used in"
+  weeks ||--o{ week_plan : "contains"
+  dishes ||--o{ week_plan : "assigned to"
+```
+
+<!-- ```
+┌─────────────┐     ┌──────────────────┐     ┌─────────────────┐
+│   dishes    │     │ dish_ingredients │     │   ingredients   │
+│─────────────│     │──────────────────│     │─────────────────│
+│ id          │◄────│ dish_id          │     │ id              │
+│ house_code  │     │ ingredient_id    │────►│ house_code      │
+│ name        │     │ quantity         │     │ name            │
+└─────────────┘     └──────────────────┘     └─────────────────┘
+       ▲
+       │
+┌──────────────┐        ┌─────────────┐
+│  week_plan   │        │    weeks    │
+│──────────────│        │─────────────│
+│ week_id      │───────►│ id          │
+│ day          │        │ house_code  │
+│ slot         │        │ start_date  │
+│ dish_id      │        └─────────────┘
+└──────────────┘
+``` -->
