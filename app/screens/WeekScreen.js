@@ -231,9 +231,12 @@ async function handleSelectDish(dish) {
                       onPress={() => handleSlotPress(day, slot)}
                       activeOpacity={0.7}
                     >
-                      <Text style={[styles.slotLabel, lunch ? styles.slotLabelLunch : styles.slotLabelDinner]}>
-                        {SLOT_LABELS[slot]}
-                      </Text>
+                      <Ionicons
+                        name={lunch ? 'sunny' : 'moon'}
+                        size={10}
+                        color={lunch ? '#388e3c' : '#1976d2'}
+                        style={styles.slotIcon}
+                      />
                       <Text
                         style={[
                           styles.slotDish,
@@ -297,14 +300,15 @@ const styles = StyleSheet.create({
   weekText: { fontSize: 13, fontWeight: '700', color: '#1a1a1a', letterSpacing: 0.3 },
   weekBadge: { fontSize: 10, color: '#4CAF50', marginTop: 1, letterSpacing: 0.2 },
 
-  scroll: { padding: 6, paddingBottom: 8 },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 5 },
+  scroll: { padding: 4, paddingBottom: 4 },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 4 },
 
   dayCard: {
     backgroundColor: 'white',
     borderRadius: 10,
     padding: 6,
-    width: '48.5%',
+    paddingVertical: 8,
+    width: '48.8%',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.06,
@@ -322,33 +326,25 @@ const styles = StyleSheet.create({
     marginBottom: 4, letterSpacing: 0.8,
     textTransform: 'uppercase', width: '100%',
   },
-
   slot: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    borderRadius: 6,
-    paddingVertical: 4,
-    paddingHorizontal: 7,
-    marginBottom: 3,
-    borderLeftWidth: 3,
+    borderRadius: 5,
+    paddingVertical: 5,
+    paddingHorizontal: 5,
+    marginBottom: 2,
+    borderLeftWidth: 2,
     gap: 4,
   },
-  slotLabel: {
-    fontSize: 9, fontWeight: '700',
-    letterSpacing: 0.5, textTransform: 'uppercase',
-    flexShrink: 0,
-  },
-  slotDish: { fontSize: 11, flex: 1, textAlign: 'right' },
-  slotEmpty: { color: '#c5c5c5', fontStyle: 'italic' },
-  slotDishLunch: { color: '#2e7d32', fontWeight: '600' },
-  slotDishDinner: { color: '#1565c0', fontWeight: '600' },
   slotLunch: { backgroundColor: '#f0faf0', borderLeftColor: '#81c784' },
   slotDinner: { backgroundColor: '#e8f4fd', borderLeftColor: '#64b5f6' },
   slotLunchFilled: { backgroundColor: '#d4edda', borderLeftColor: '#4CAF50' },
   slotDinnerFilled: { backgroundColor: '#cce5f5', borderLeftColor: '#2196f3' },
-  // slotLabelLunch: { color: '#2e7d32' },
-  // slotLabelDinner: { color: '#1565c0' },
+  slotIcon: { flexShrink: 0 },
+  slotDish: { fontSize: 10, flex: 1 },
+  slotEmpty: { color: '#c5c5c5', fontStyle: 'italic' },
+  slotDishLunch: { color: '#2e7d32', fontWeight: '600' },
+  slotDishDinner: { color: '#1565c0', fontWeight: '600' },
   modalOverlay: {
     flex: 1, justifyContent: 'flex-end',
     backgroundColor: 'rgba(0,0,0,0.35)',
