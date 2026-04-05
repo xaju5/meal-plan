@@ -54,15 +54,18 @@ Join our community of developers creating universal apps.
 ## DATABASE MODEL
 ```mermaid
 erDiagram
+  houses {
+    text code PK
+    timestamp created_at
+  }
   dishes {
     uuid id PK
-    text house_code
+    text house_code FK
     text name
-    timestamp created_at
   }
   ingredients {
     uuid id PK
-    text house_code
+    text house_code FK
     text name
   }
   dish_ingredients {
@@ -74,18 +77,20 @@ erDiagram
   }
   weeks {
     uuid id PK
-    text house_code
+    text house_code FK
     int year
     int week_number
   }
   week_plan {
     uuid id PK
-    text house_code
     uuid week_id FK
     text day
     text slot
     uuid dish_id FK
   }
+  houses ||--o{ dishes : "has"
+  houses ||--o{ ingredients : "has"
+  houses ||--o{ weeks : "has"
   dishes ||--o{ dish_ingredients : "has"
   ingredients ||--o{ dish_ingredients : "used in"
   weeks ||--o{ week_plan : "contains"
