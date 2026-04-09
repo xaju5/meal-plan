@@ -36,18 +36,27 @@ function getWeekLabel(year, week) {
   return `${fmt(monday)} – ${fmt(sunday)}`;
 }
 
-function SlotCell({ entry, onPress, isLunch }) {
+function isPastWeek(year, week, current) {
+  return year < current.year || (year === current.year && week < current.week);
+}
+
+function SlotCell({ entry, onPress, isLunch, isPast }) {
   return (
     <TouchableOpacity
-      style={[styles.slotCell, isLunch ? styles.slotCellLunch : styles.slotCellDinner,
-        entry?.dish_id && (isLunch ? styles.slotCellLunchFilled : styles.slotCellDinnerFilled)
+      style={[
+        styles.slotCell,
+        isPast ? styles.slotCellPast : (isLunch ? styles.slotCellLunch : styles.slotCellDinner),
+        !isPast && entry?.dish_id && (isLunch ? styles.slotCellLunchFilled : styles.slotCellDinnerFilled)
       ]}
       onPress={onPress}
-      activeOpacity={0.7}
+      activeOpacity={isPast ? 0.5 : 0.7}
     >
       <Text
-        style={[styles.slotText, !entry?.dish_id && styles.slotEmpty,
-          entry?.dish_id && (isLunch ? styles.slotTextLunch : styles.slotTextDinner)
+        style={[
+          styles.slotText,
+          !entry?.dish_id && styles.slotEmpty,
+          isPast && entry?.dish_id && styles.slotTextPast,
+          !isPast && entry?.dish_id && (isLunch ? styles.slotTextLunch : styles.slotTextDinner)
         ]}
         numberOfLines={1}
         ellipsizeMode="tail"
@@ -69,6 +78,7 @@ export default function WeekScreen() {
   const [selectingSlot, setSelectingSlot] = useState(null);
 
   const isCurrentWeek = year === current.year && week === current.week;
+  const past = isPastWeek(year, week, current);
 
   const loadWeek = useCallback(async () => {
     setLoading(true);
@@ -217,31 +227,41 @@ export default function WeekScreen() {
         </View>
       ) : (
         <ScrollView contentContainerStyle={styles.scroll}>
-          {/* Column headers */}
           <View style={styles.columnHeaders}>
             <View style={styles.dayLabelSpacer} />
             <View style={styles.mealIconSpacer} />
             <Text style={styles.columnHeader}>1st</Text>
             <Text style={styles.columnHeader}>2nd</Text>
           </View>
+
           {DAYS.map(day => {
             const isWeekend = WEEKEND.includes(day);
             return (
-              <View key={day} style={[styles.dayCard, isWeekend && styles.dayCardWeekend]}>
-
-                {/* Day label */}
-                <View style={[styles.dayLabelContainer, isWeekend && styles.dayLabelContainerWeekend]}>
-                  <Text style={[styles.dayLabel, isWeekend && styles.dayLabelWeekend]}>
+              <View key={day} style={[
+                styles.dayCard,
+                isWeekend && !past && styles.dayCardWeekend,
+                past && styles.dayCardPast,
+              ]}>
+                <View style={[
+                  styles.dayLabelContainer,
+                  isWeekend && !past && styles.dayLabelContainerWeekend,
+                  past && styles.dayLabelContainerPast,
+                ]}>
+                  <Text style={[
+                    styles.dayLabel,
+                    isWeekend && !past && styles.dayLabelWeekend,
+                    past && styles.dayLabelPast,
+                  ]}>
                     {DAY_LABELS[day]}
                   </Text>
                 </View>
 
-                {/* Slots */}
                 <View style={styles.slotsContainer}>
-
-                  {/* Lunch row */}
                   <View style={styles.mealRow}>
-                    <Ionicons name="sunny" size={12} color="#f59f00" style={styles.mealIcon} />
+                    <Ionicons name="sunny" size={13}
+                      color={past ? '#bbb' : '#f59f00'}
+                      style={styles.mealIcon}
+                    />
                     <View style={styles.slotPair}>
                       {LUNCH_SLOTS.map(slot => (
                         <SlotCell
@@ -249,14 +269,17 @@ export default function WeekScreen() {
                           entry={weekPlan[`${day}_${slot}`]}
                           onPress={() => handleSlotPress(day, slot)}
                           isLunch={true}
+                          isPast={past}
                         />
                       ))}
                     </View>
                   </View>
 
-                  {/* Dinner row */}
                   <View style={styles.mealRow}>
-                    <Ionicons name="moon" size={12} color="#7c5cbf" style={styles.mealIcon} />
+                    <Ionicons name="moon" size={13}
+                      color={past ? '#bbb' : '#7c5cbf'}
+                      style={styles.mealIcon}
+                    />
                     <View style={styles.slotPair}>
                       {DINNER_SLOTS.map(slot => (
                         <SlotCell
@@ -264,11 +287,11 @@ export default function WeekScreen() {
                           entry={weekPlan[`${day}_${slot}`]}
                           onPress={() => handleSlotPress(day, slot)}
                           isLunch={false}
+                          isPast={past}
                         />
                       ))}
                     </View>
                   </View>
-
                 </View>
               </View>
             );
@@ -348,57 +371,48 @@ const styles = StyleSheet.create({
     shadowRadius: 3,
     elevation: 2,
   },
-  dayCardWeekend: {
-    backgroundColor: '#fffdf5',
-  },
+  dayCardWeekend: { backgroundColor: '#fffdf5' },
+  dayCardPast: { backgroundColor: '#f4f4f4' },
 
   dayLabelContainer: {
-    width: 36,
-    backgroundColor: '#f0faf0',
-    justifyContent: 'center',
-    alignItems: 'center',
+    width: 36, backgroundColor: '#f0faf0',
+    justifyContent: 'center', alignItems: 'center',
     paddingVertical: 8,
   },
-  dayLabelContainerWeekend: {
-    backgroundColor: '#fff8e1',
-  },
+  dayLabelContainerWeekend: { backgroundColor: '#fff8e1' },
+  dayLabelContainerPast: { backgroundColor: '#ebebeb' },
+
   dayLabel: {
-    fontSize: 10, fontWeight: '800',
-    color: '#2e7d32', letterSpacing: 0.5,
-    textTransform: 'uppercase',
+    fontSize: 11, fontWeight: '800', color: '#2e7d32',
+    letterSpacing: 0.5, textTransform: 'uppercase',
   },
-  dayLabelWeekend: {
-    color: '#f59f00',
-  },
+  dayLabelWeekend: { color: '#f59f00' },
+  dayLabelPast: { color: '#aaa' },
 
   slotsContainer: {
     flex: 1, paddingVertical: 5,
-    paddingHorizontal: 8, gap: 4,
+    paddingHorizontal: 8, gap: 3,
   },
-  mealRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
+  mealRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   mealIcon: { width: 14 },
-  slotPair: {
-    flex: 1, flexDirection: 'row', gap: 4,
-  },
+  slotPair: { flex: 1, flexDirection: 'row', gap: 4 },
 
   slotCell: {
     flex: 1, borderRadius: 5,
-    paddingVertical: 4, paddingHorizontal: 6,
+    paddingVertical: 5, paddingHorizontal: 6,
     borderLeftWidth: 2,
   },
   slotCellLunch: { backgroundColor: '#f0faf0', borderLeftColor: '#81c784' },
   slotCellDinner: { backgroundColor: '#f0f0ff', borderLeftColor: '#9575cd' },
   slotCellLunchFilled: { backgroundColor: '#d4edda', borderLeftColor: '#4CAF50' },
   slotCellDinnerFilled: { backgroundColor: '#e8e4f8', borderLeftColor: '#673ab7' },
+  slotCellPast: { backgroundColor: '#f0f0f0', borderLeftColor: '#ddd' },
 
-  slotText: { fontSize: 11, color: '#333' },
+  slotText: { fontSize: 12, color: '#333' },
   slotEmpty: { color: '#ccc', fontStyle: 'italic' },
   slotTextLunch: { color: '#2e7d32', fontWeight: '600' },
   slotTextDinner: { color: '#4527a0', fontWeight: '600' },
+  slotTextPast: { color: '#999', fontWeight: '500' },
 
   modalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.35)' },
   modalSheet: {
