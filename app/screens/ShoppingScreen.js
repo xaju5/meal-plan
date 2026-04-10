@@ -1,10 +1,10 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity,
   StyleSheet, ActivityIndicator, Alert, RefreshControl
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import * as Clipboard from 'expo-clipboard'; 
+import * as Clipboard from 'expo-clipboard';
 import { getClient, getHouseCode } from '../lib/supabase';
 
 function getCurrentWeek() {
@@ -14,15 +14,129 @@ function getCurrentWeek() {
   const yearStart = new Date(d.getFullYear(), 0, 1);
   return {
     year: d.getFullYear(),
-    week: Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7)
+    week: Math.ceil((((d - yearStart) / 86400000) + 1) / 7)
   };
 }
 
 function formatQuantity(quantity, unit) {
   if (!quantity && !unit) return null;
   if (!quantity) return unit;
-  const formattedQty = quantity % 1 === 0 ? quantity : quantity.toFixed(1);
-  return `${formattedQty}${unit ? ' ' + unit : ''}`;
+  return `${quantity % 1 === 0 ? quantity : quantity.toFixed(1)}${unit ? ' ' + unit : ''}`;
+}
+
+async function fetchCurrentWeekId(client, year, week) {
+  const { data } = await client
+    .from('weeks')
+    .select('id')
+    .eq('year', year)
+    .eq('week_number', week)
+    .single();
+  return data?.id || null;
+}
+
+async function fetchDishIds(client, weekId) {
+  const { data } = await client
+    .from('week_plan')
+    .select('dish_id')
+    .eq('week_id', weekId)
+    .not('dish_id', 'is', null);
+  return [...new Set((data || []).map(p => p.dish_id))];
+}
+
+async function fetchIngredientIds(client, dishIds) {
+  if (dishIds.length === 0) return [];
+  const { data } = await client
+    .from('dish_ingredients')
+    .select('ingredient_id')
+    .in('dish_id', dishIds);
+  return [...new Set((data || []).map(d => d.ingredient_id))];
+}
+
+async function syncShoppingItems(client, houseCode, weekId, ingredientIds) {
+  if (ingredientIds.length === 0) return;
+
+  const { data: existing } = await client
+    .from('shopping_items')
+    .select('ingredient_id')
+    .eq('week_id', weekId);
+
+  const existingIds = new Set((existing || []).map(e => e.ingredient_id));
+  const toInsert = ingredientIds.filter(id => !existingIds.has(id));
+
+  if (toInsert.length === 0) return;
+
+  const { error } = await client.from('shopping_items').insert(
+    toInsert.map(ingredient_id => ({
+      house_code: houseCode,
+      week_id: weekId,
+      ingredient_id,
+      checked: false,
+    }))
+  );
+
+  if (error) console.error('syncShoppingItems error:', error.message);
+}
+
+async function buildEnrichedItems(client, weekId, dishIds) {
+  const { data: shoppingData, error } = await client
+    .from('shopping_items')
+    .select('id, checked, checked_at, ingredient_id, ingredients(name)')
+    .eq('week_id', weekId);
+
+  if (error) {
+    console.error('buildEnrichedItems fetch error:', error.message);
+    return [];
+  }
+
+  if (!shoppingData || shoppingData.length === 0) return [];
+
+  if (dishIds.length === 0) return shoppingData.map(item => ({
+    ...item, dishCount: 0, quantity: null, unit: null
+  }));
+
+  const { data: dishIngredients } = await client
+    .from('dish_ingredients')
+    .select('ingredient_id, quantity, unit')
+    .in('dish_id', dishIds);
+
+  const countMap = {};
+  const quantityMap = {};
+  const unitMap = {};
+
+  (dishIngredients || []).forEach(di => {
+    const key = di.ingredient_id;
+    countMap[key] = (countMap[key] || 0) + 1;
+    unitMap[key] = di.unit;
+    if (di.quantity) quantityMap[key] = (quantityMap[key] || 0) + di.quantity;
+  });
+
+  return shoppingData.map(item => ({
+    ...item,
+    dishCount: countMap[item.ingredient_id] || 1,
+    quantity: quantityMap[item.ingredient_id] || null,
+    unit: unitMap[item.ingredient_id] || null,
+  }));
+}
+
+async function cleanupPastWeeks(client, houseCode, currentWeekId) {
+  const { data: oldWeeks } = await client
+    .from('weeks')
+    .select('id')
+    .eq('house_code', houseCode)
+    .neq('id', currentWeekId);
+
+  if (!oldWeeks || oldWeeks.length === 0) return;
+
+  for (const w of oldWeeks) {
+    const { count } = await client
+      .from('week_plan')
+      .select('id', { count: 'exact', head: true })
+      .eq('week_id', w.id);
+
+    if (count === 0) {
+      await client.from('weeks').delete().eq('id', w.id);
+    }
+  }
 }
 
 export default function ShoppingScreen() {
@@ -30,198 +144,89 @@ export default function ShoppingScreen() {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
 
-  const load = useCallback(async () => {
+  const loadShopping = useCallback(async () => {
+    setLoading(true);
     try {
-      setLoading(true);
       const client = await getClient();
       const houseCode = await getHouseCode();
       const { year, week } = getCurrentWeek();
 
-      const { data: weekData } = await client
-        .from('weeks')
-        .select('id')
-        .eq('year', year)
-        .eq('week_number', week)
-        .single();
+      const weekId = await fetchCurrentWeekId(client, year, week);
 
-      if (!weekData) {
+      if (!weekId) {
         setItems([]);
+        setLoading(false);
         return;
       }
 
-      const { data: planData } = await client
-        .from('week_plan')
-        .select('dish_id')
-        .eq('week_id', weekData.id)
-        .not('dish_id', 'is', null);
+      const dishIds = await fetchDishIds(client, weekId);
+      const ingredientIds = await fetchIngredientIds(client, dishIds);
 
-      const dishIds = [...new Set((planData || []).map(p => p.dish_id))];
+      await syncShoppingItems(client, houseCode, weekId, ingredientIds);
+      await cleanupPastWeeks(client, houseCode, weekId);
 
-      await syncShoppingList(client, houseCode, weekData.id, dishIds);
-      await cleanupPastWeeks(client, houseCode, weekData.id);
-
-      const { data } = await client
-        .from('shopping_items')
-        .select('id, checked, ingredient_id, ingredients(name)')
-        .eq('week_id', weekData.id);
-
-      const withMeta = await enrichWithDishCount(client, data || [], weekData.id, dishIds);
-      setItems(withMeta);
-    } catch (error) {
-      console.error("Error loading shopping list:", error);
-    } finally {
-      setLoading(false);
+      const enriched = await buildEnrichedItems(client, weekId, dishIds);
+      setItems(enriched);
+    } catch (e) {
+      console.error('loadShopping error:', e.message);
+      Alert.alert('Error', 'Could not load shopping list');
     }
+    setLoading(false);
   }, []);
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  useEffect(() => { loadShopping(); }, [loadShopping]);
 
   useEffect(() => {
     let channel;
-    const setupSubscription = async () => {
+    (async () => {
       const client = await getClient();
       const houseCode = await getHouseCode();
-      
       channel = client
-        .channel('shopping_changes')
-        .on('postgres_changes', 
-          { 
-            event: '*', 
-            schema: 'public', 
+        .channel('shopping_sync')
+        .on('postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
             table: 'shopping_items',
-            filter: `house_code=eq.${houseCode}` 
-          }, 
-          () => load()
+            filter: `house_code=eq.${houseCode}`
+          },
+          () => loadShopping()
         )
         .subscribe();
-    };
-
-    setupSubscription();
-    return () => {
-      if (channel) channel.unsubscribe();
-    };
-  }, [load]);
-
-
-  async function syncShoppingList(client, houseCode, weekId, dishIds) {
-    if (dishIds.length === 0) return;
-
-    const { data: dishIngredients } = await client
-      .from('dish_ingredients')
-      .select('ingredient_id')
-      .in('dish_id', dishIds);
-
-    const ingredientIds = [...new Set((dishIngredients || []).map(d => d.ingredient_id))];
-
-    const { data: existing } = await client
-      .from('shopping_items')
-      .select('ingredient_id')
-      .eq('week_id', weekId);
-
-    const existingIds = new Set((existing || []).map(e => e.ingredient_id));
-    const toInsert = ingredientIds.filter(id => !existingIds.has(id));
-
-    if (toInsert.length > 0) {
-      await client.from('shopping_items').insert(
-        toInsert.map(ingredient_id => ({
-          house_code: houseCode,
-          week_id: weekId,
-          ingredient_id,
-          checked: false,
-        }))
-      );
-    }
-  }
-
-  async function enrichWithDishCount(client, items, weekId, dishIds) {
-    if (items.length === 0 || dishIds.length === 0) return items;
-
-    const { data: dishIngredients } = await client
-      .from('dish_ingredients')
-      .select('ingredient_id, quantity, unit')
-      .in('dish_id', dishIds);
-
-    const countMap = {};
-    const qtyMap = {};
-    const unitMap = {};
-
-    (dishIngredients || []).forEach(di => {
-      const id = di.ingredient_id;
-      countMap[id] = (countMap[id] || 0) + 1;
-      unitMap[id] = di.unit;
-      if (di.quantity) qtyMap[id] = (qtyMap[id] || 0) + di.quantity;
-    });
-
-    return items.map(item => ({
-      ...item,
-      dishCount: countMap[item.ingredient_id] || 1,
-      quantity: qtyMap[item.ingredient_id] || null,
-      unit: unitMap[item.ingredient_id] || null,
-    }));
-  }
-
-  async function cleanupPastWeeks(client, houseCode, currentWeekId) {
-    const { data: oldWeeks } = await client
-      .from('weeks')
-      .select('id')
-      .eq('house_code', houseCode)
-      .neq('id', currentWeekId);
-
-    if (!oldWeeks) return;
-
-    for (const w of oldWeeks) {
-      const { count } = await client
-        .from('week_plan')
-        .select('id', { count: 'exact', head: true })
-        .eq('week_id', w.id);
-
-      if (count === 0) {
-        await client.from('weeks').delete().eq('id', w.id);
-      }
-    }
-  }
+    })();
+    return () => { if (channel) channel.unsubscribe(); };
+  }, [loadShopping]);
 
   async function toggleItem(item) {
-    setItems(prev => prev.map(i => 
-      i.id === item.id ? { ...i, checked: !i.checked } : i
-    ));
-
+    setSyncing(true);
     try {
-      setSyncing(true);
       const client = await getClient();
-      await client
+      const { error } = await client
         .from('shopping_items')
         .update({
           checked: !item.checked,
           checked_at: !item.checked ? new Date().toISOString() : null
         })
         .eq('id', item.id);
-    } catch (error) {
-      Alert.alert("Error", "Could not update item");
-      load(); // Revert on error
-    } finally {
-      setSyncing(false);
+      if (error) throw error;
+    } catch (e) {
+      Alert.alert('Error', 'Could not update item');
     }
+    setSyncing(false);
   }
 
-  const exportToClipboard = async () => {
+  async function exportToClipboard() {
     const pending = items.filter(i => !i.checked);
     if (pending.length === 0) {
-      Alert.alert('List empty', 'No pending items to copy.');
+      Alert.alert('Nothing to export', 'All items are already checked.');
       return;
     }
     const text = pending
-      .map(i => {
-        const qty = formatQuantity(i.quantity, i.unit);
-        return `- ${i.ingredients.name} ${qty ? `(${qty})` : ''} x${i.dishCount}`;
-      })
+      .map(i => `${i.ingredients.name} x${i.dishCount}`)
       .join('\n');
-    
     await Clipboard.setStringAsync(text);
-    Alert.alert('Copied!', 'The list has been copied to your clipboard.');
-  };
+    Alert.alert('Copied!', 'Shopping list copied to clipboard.');
+  }
 
   const pending = items.filter(i => !i.checked);
   const done = items.filter(i => i.checked);
@@ -236,7 +241,7 @@ export default function ShoppingScreen() {
       return (
         <View style={styles.divider}>
           <View style={styles.dividerLine} />
-          <Text style={styles.dividerText}>Completado</Text>
+          <Text style={styles.dividerText}>checked</Text>
           <View style={styles.dividerLine} />
         </View>
       );
@@ -252,10 +257,10 @@ export default function ShoppingScreen() {
         activeOpacity={0.7}
       >
         <View style={[styles.checkbox, isChecked && styles.checkboxChecked]}>
-          {isChecked && <Ionicons name="checkmark" size={14} color="white" />}
+          {isChecked && <Text style={styles.checkmark}>✓</Text>}
         </View>
         <Text style={[styles.name, isChecked && styles.nameChecked]} numberOfLines={1}>
-          {item.ingredients?.name || 'Unknown Item'}
+          {item.ingredients.name}
         </Text>
         <View style={styles.meta}>
           {qty && (
@@ -263,7 +268,7 @@ export default function ShoppingScreen() {
           )}
           <View style={[styles.badge, isChecked && styles.badgeChecked]}>
             <Text style={[styles.badgeText, isChecked && styles.metaChecked]}>
-              x{item.dishCount}
+              ×{item.dishCount}
             </Text>
           </View>
         </View>
@@ -271,7 +276,7 @@ export default function ShoppingScreen() {
     );
   }
 
-  if (loading && items.length === 0) {
+  if (loading) {
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" color="#4CAF50" />
@@ -283,23 +288,24 @@ export default function ShoppingScreen() {
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>
-          {pending.length} pendiente{pending.length !== 1 ? 's' : ''}
+          {pending.length} item{pending.length !== 1 ? 's' : ''} left
         </Text>
         <View style={styles.headerActions}>
-          {syncing && <ActivityIndicator size="small" color="#4CAF50" style={{ marginRight: 8 }} />}
+          {syncing && (
+            <ActivityIndicator size="small" color="#4CAF50" style={{ marginRight: 8 }} />
+          )}
           <TouchableOpacity onPress={exportToClipboard} style={styles.exportButton}>
             <Ionicons name="copy-outline" size={18} color="#4CAF50" />
-            <Text style={styles.exportText}>Copiar</Text>
+            <Text style={styles.exportText}>Copy list</Text>
           </TouchableOpacity>
         </View>
       </View>
 
       {items.length === 0 ? (
         <View style={styles.centered}>
-          <Ionicons name="cart-outline" size={48} color="#ccc" />
-          <Text style={styles.emptyTitle}>Lista vacía</Text>
+          <Text style={styles.emptyTitle}>No ingredients this week</Text>
           <Text style={styles.emptySubtitle}>
-            Añade platos al plan semanal para generar la lista.
+            Assign dishes to the current week to build your shopping list
           </Text>
         </View>
       ) : (
@@ -310,7 +316,7 @@ export default function ShoppingScreen() {
           refreshControl={
             <RefreshControl
               refreshing={loading}
-              onRefresh={load}
+              onRefresh={loadShopping}
               colors={['#4CAF50']}
               tintColor="#4CAF50"
             />
@@ -325,22 +331,24 @@ export default function ShoppingScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f8f9fa' },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32 },
+
   header: {
     flexDirection: 'row', alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: 'white', paddingVertical: 12,
-    paddingHorizontal: 16, borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    justifyContent: 'space-between', backgroundColor: 'white',
+    paddingVertical: 12, paddingHorizontal: 16,
+    borderBottomWidth: 1, borderBottomColor: '#eee',
   },
   headerTitle: { fontSize: 14, fontWeight: '700', color: '#1a1a1a' },
   headerActions: { flexDirection: 'row', alignItems: 'center' },
   exportButton: {
-    flexDirection: 'row', alignItems: 'center',
-    gap: 5, paddingVertical: 6, paddingHorizontal: 10,
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    paddingVertical: 6, paddingHorizontal: 10,
     borderRadius: 8, borderWidth: 1, borderColor: '#4CAF50',
   },
   exportText: { fontSize: 13, color: '#4CAF50', fontWeight: '600' },
+
   list: { padding: 12, paddingBottom: 32 },
+
   row: {
     flexDirection: 'row', alignItems: 'center',
     backgroundColor: 'white', borderRadius: 10,
@@ -350,26 +358,42 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05, shadowRadius: 2, elevation: 1,
   },
   rowChecked: { backgroundColor: '#f0f0f0', shadowOpacity: 0, elevation: 0 },
+
   checkbox: {
     width: 22, height: 22, borderRadius: 6,
     borderWidth: 2, borderColor: '#4CAF50',
     justifyContent: 'center', alignItems: 'center',
   },
   checkboxChecked: { backgroundColor: '#4CAF50', borderColor: '#4CAF50' },
+  checkmark: { fontSize: 13, color: 'white', fontWeight: '700' },
+
   name: { flex: 1, fontSize: 15, color: '#1a1a1a', fontWeight: '500' },
   nameChecked: {
     color: '#aaa', fontStyle: 'italic',
     textDecorationLine: 'line-through', fontWeight: '400',
   },
+
   meta: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   quantity: { fontSize: 13, color: '#888', fontWeight: '500' },
   metaChecked: { color: '#bbb' },
-  badge: { backgroundColor: '#e8f5e9', borderRadius: 5, paddingHorizontal: 6, paddingVertical: 2 },
+
+  badge: {
+    backgroundColor: '#e8f5e9', borderRadius: 5,
+    paddingHorizontal: 6, paddingVertical: 2,
+  },
   badgeChecked: { backgroundColor: '#e8e8e8' },
   badgeText: { fontSize: 11, color: '#2e7d32', fontWeight: '700' },
-  divider: { flexDirection: 'row', alignItems: 'center', marginVertical: 10, gap: 8 },
+
+  divider: {
+    flexDirection: 'row', alignItems: 'center',
+    marginVertical: 10, gap: 8,
+  },
   dividerLine: { flex: 1, height: 1, backgroundColor: '#ddd' },
-  dividerText: { fontSize: 11, color: '#bbb', fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5 },
-  emptyTitle: { fontSize: 17, fontWeight: '700', color: '#555', marginTop: 12, marginBottom: 4 },
+  dividerText: {
+    fontSize: 11, color: '#bbb', fontWeight: '600',
+    textTransform: 'uppercase', letterSpacing: 0.5,
+  },
+
+  emptyTitle: { fontSize: 17, fontWeight: '700', color: '#555', marginBottom: 8, textAlign: 'center' },
   emptySubtitle: { fontSize: 14, color: '#aaa', textAlign: 'center', lineHeight: 20 },
 });
