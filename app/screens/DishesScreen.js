@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity,
-  StyleSheet, Alert, ActivityIndicator
+  StyleSheet, Alert, ActivityIndicator, RefreshControl
 } from 'react-native';
 import { getClient } from '../lib/supabase';
 import DishCard from '../components/DishCard';
@@ -84,6 +84,14 @@ export default function DishesScreen() {
         data={dishes}
         keyExtractor={d => d.id}
         contentContainerStyle={styles.list}
+        refreshControl={
+          <RefreshControl
+            refreshing={loading}
+            onRefresh={loadDishes}
+            colors={['#4CAF50']}
+            tintColor="#4CAF50"
+          />
+        }
         ListEmptyComponent={
           <Text style={styles.empty}>No dishes yet. Tap + to add one.</Text>
         }

@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity,
-  StyleSheet, Alert, ActivityIndicator, Modal, FlatList
+  StyleSheet, Alert, ActivityIndicator, Modal,
+  FlatList, RefreshControl
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { getClient, getHouseCode } from '../lib/supabase';
@@ -226,7 +227,17 @@ export default function WeekScreen() {
           <ActivityIndicator size="large" color="#4CAF50" />
         </View>
       ) : (
-        <ScrollView contentContainerStyle={styles.scroll}>
+        <ScrollView 
+          contentContainerStyle={styles.scroll}
+          refreshControl={
+            <RefreshControl
+              refreshing={loading}
+              onRefresh={loadWeek}
+              colors={['#4CAF50']}
+              tintColor="#4CAF50"
+            />
+          }
+        >
           <View style={styles.columnHeaders}>
             <View style={styles.dayLabelSpacer} />
             <View style={styles.mealIconSpacer} />
