@@ -4,7 +4,6 @@ import {
   StyleSheet, ScrollView, Alert, KeyboardAvoidingView, Platform
 } from 'react-native';
 import { getClient } from '../lib/supabase';
-import { getHouseCode } from '../lib/supabase';
 
 export default function DishModal({ visible, dish, onClose }) {
   const [name, setName] = useState('');
@@ -54,7 +53,6 @@ export default function DishModal({ visible, dish, onClose }) {
     }
     setSaving(true);
     const client = await getClient();
-    const houseCode = await getHouseCode();
 
     try {
       let dishId;
@@ -68,7 +66,7 @@ export default function DishModal({ visible, dish, onClose }) {
         // Create new Dish
         const { data, error } = await client
           .from('dishes')
-          .insert({ name: name.trim(), house_code: houseCode })
+          .insert({ name: name.trim() })
           .select('id')
           .single();
         if (error) throw error;
@@ -84,7 +82,6 @@ export default function DishModal({ visible, dish, onClose }) {
             .from('ingredients')
             .select('id')
             .eq('name', ing.name.trim())
-            .eq('house_code', houseCode)
             .single();
 
           if (existing) {
@@ -92,7 +89,7 @@ export default function DishModal({ visible, dish, onClose }) {
           } else {
             const { data: newIng } = await client
               .from('ingredients')
-              .insert({ name: ing.name.trim(), house_code: houseCode })
+              .insert({ name: ing.name.trim()})
               .select('id')
               .single();
             ingredientId = newIng.id;

@@ -14,15 +14,54 @@ export default function DishesScreen() {
   const [editingDish, setEditingDish] = useState(null);
 
   const loadDishes = useCallback(async () => {
-    const client = await getClient();
-    const { data, error } = await client
+  const client = await getClient();
+  await AsyncStorage.clear();
+  const [{ data: dishesData }, { data: weekPlanData }] = await Promise.all([
+    client
       .from('dishes')
-      .select(`id, name, dish_ingredients(id, quantity, unit, ingredients ( id, name ))`)
-      .order('name');
+      .select(`id, name, dish_ingredients(id, quantity, unit, ingredients(id, name))`)
+      .order('name'),
+    client
+      .from('week_plan')
+      .select('dish_id, weeks(year, week_number)')
+      .not('dish_id', 'is', null)
+  ]);
 
-    if (!error) setDishes(data || []);
-    setLoading(false);
+  const lastUsedMap = {};
+  (weekPlanData || []).forEach(entry => {
+    const { dish_id, weeks } = entry;
+    if (!weeks) return;
+    const prev = lastUsedMap[dish_id];
+    if (!prev || weeks.year > prev.year ||
+      (weeks.year === prev.year && weeks.week_number > prev.week_number)) {
+      lastUsedMap[dish_id] = weeks;
+    }
+  });
+
+  const { year: currentYear, week: currentWeek } = getCurrentWeek();
+
+  const enriched = (dishesData || []).map(dish => {
+    const last = lastUsedMap[dish.id];
+    let weeksAgo = null;
+    if (last) {
+      weeksAgo = (currentYear - last.year) * 52 + (currentWeek - last.week_number);
+    }
+    return { ...dish, weeksAgo };
+  });
+
+  setDishes(enriched);
+  setLoading(false);
   }, []);
+  function getCurrentWeek() {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    d.setDate(d.getDate() + 4 - (d.getDay() || 7));
+    const yearStart = new Date(d.getFullYear(), 0, 1);
+    return {
+      year: d.getFullYear(),
+      week: Math.ceil((((d - yearStart) / 86400000) + 1) / 7)
+    };
+}
 
   useEffect(() => {
     loadDishes();

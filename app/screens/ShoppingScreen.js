@@ -5,7 +5,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
-import { getClient, getHouseCode } from '../lib/supabase';
+import { getClient } from '../lib/supabase';
 
 function getCurrentWeek() {
   const d = new Date();
@@ -52,7 +52,7 @@ async function fetchIngredientIds(client, dishIds) {
   return [...new Set((data || []).map(d => d.ingredient_id))];
 }
 
-async function syncShoppingItems(client, houseCode, weekId, ingredientIds) {
+async function syncShoppingItems(client, weekId, ingredientIds) {
   if (ingredientIds.length === 0) return;
 
   const { data: existing } = await client
@@ -67,7 +67,6 @@ async function syncShoppingItems(client, houseCode, weekId, ingredientIds) {
 
   const { error } = await client.from('shopping_items').insert(
     toInsert.map(ingredient_id => ({
-      house_code: houseCode,
       week_id: weekId,
       ingredient_id,
       checked: false,
@@ -118,11 +117,10 @@ async function buildEnrichedItems(client, weekId, dishIds) {
   }));
 }
 
-async function cleanupPastWeeks(client, houseCode, currentWeekId) {
+async function cleanupPastWeeks(client, currentWeekId) {
   const { data: oldWeeks } = await client
     .from('weeks')
     .select('id')
-    .eq('house_code', houseCode)
     .neq('id', currentWeekId);
 
   if (!oldWeeks || oldWeeks.length === 0) return;
@@ -132,7 +130,6 @@ async function cleanupPastWeeks(client, houseCode, currentWeekId) {
       .from('week_plan')
       .select('id', { count: 'exact', head: true })
       .eq('week_id', w.id);
-
     if (count === 0) {
       await client.from('weeks').delete().eq('id', w.id);
     }
@@ -144,11 +141,10 @@ export default function ShoppingScreen() {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
 
-  const loadShopping = useCallback(async () => {
+    const loadShopping = useCallback(async () => {
     setLoading(true);
     try {
       const client = await getClient();
-      const houseCode = await getHouseCode();
       const { year, week } = getCurrentWeek();
 
       const weekId = await fetchCurrentWeekId(client, year, week);
@@ -162,8 +158,8 @@ export default function ShoppingScreen() {
       const dishIds = await fetchDishIds(client, weekId);
       const ingredientIds = await fetchIngredientIds(client, dishIds);
 
-      await syncShoppingItems(client, houseCode, weekId, ingredientIds);
-      await cleanupPastWeeks(client, houseCode, weekId);
+      await syncShoppingItems(client, weekId, ingredientIds);
+      await cleanupPastWeeks(client, weekId);
 
       const enriched = await buildEnrichedItems(client, weekId, dishIds);
       setItems(enriched);
@@ -180,15 +176,13 @@ export default function ShoppingScreen() {
     let channel;
     (async () => {
       const client = await getClient();
-      const houseCode = await getHouseCode();
       channel = client
         .channel('shopping_sync')
         .on('postgres_changes',
           {
             event: '*',
             schema: 'public',
-            table: 'shopping_items',
-            filter: `house_code=eq.${houseCode}`
+            table: 'shopping_items'
           },
           () => loadShopping()
         )

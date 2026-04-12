@@ -5,7 +5,7 @@ import {
   FlatList, RefreshControl
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { getClient, getHouseCode } from '../lib/supabase';
+import { getClient } from '../lib/supabase';
 
 const DAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
 const DAY_LABELS = {
@@ -123,10 +123,9 @@ export default function WeekScreen() {
 
     if (existing) { setWeekId(existing.id); return existing.id; }
 
-    const houseCode = await getHouseCode();
     const { data, error } = await client
       .from('weeks')
-      .insert({ year, week_number: week, house_code: houseCode })
+      .insert({ year, week_number: week })
       .select('id').single();
 
     if (error) throw error;
