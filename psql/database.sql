@@ -11,9 +11,7 @@ CREATE TABLE dishes (
 CREATE TABLE dish_ingredients (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   dish_id UUID NOT NULL REFERENCES dishes(id) ON DELETE CASCADE,
-  ingredient_id UUID NOT NULL REFERENCES ingredients(id) ON DELETE CASCADE,
-  quantity NUMERIC,
-  unit TEXT
+  ingredient_id UUID NOT NULL REFERENCES ingredients(id) ON DELETE CASCADE
 );
 
 CREATE TABLE weeks (
@@ -36,7 +34,6 @@ CREATE TABLE shopping_items (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   week_id UUID NOT NULL REFERENCES weeks(id) ON DELETE CASCADE,
   ingredient_id UUID NOT NULL REFERENCES ingredients(id) ON DELETE CASCADE,
-  checked BOOLEAN DEFAULT false,
-  checked_at TIMESTAMP,
+  checked BOOLEAN DEFAULT false
   UNIQUE (week_id, ingredient_id)
 );

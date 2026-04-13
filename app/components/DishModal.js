@@ -19,8 +19,6 @@ export default function DishModal({ visible, dish, onClose }) {
             id: di.id,
             ingredientId: di.ingredients.id,
             name: di.ingredients.name,
-            quantity: di.quantity ? String(di.quantity) : '',
-            unit: di.unit || '',
           }))
         );
       } else {
@@ -31,13 +29,13 @@ export default function DishModal({ visible, dish, onClose }) {
   }, [visible, dish]);
 
   function addIngredient() {
-    setIngredients(prev => [...prev, { name: '', quantity: '', unit: '' }]);
+    setIngredients(prev => [...prev, { name: '' }]);
   }
 
-  function updateIngredient(index, field, value) {
+  function updateIngredient(index, value) {
     setIngredients(prev => {
       const updated = [...prev];
-      updated[index] = { ...updated[index], [field]: value };
+      updated[index] = { ...updated[index], name: value };
       return updated;
     });
   }
@@ -58,12 +56,10 @@ export default function DishModal({ visible, dish, onClose }) {
       let dishId;
 
       if (dish) {
-        // Edit existing Dish
         await client.from('dishes').update({ name: name.trim() }).eq('id', dish.id);
         dishId = dish.id;
         await client.from('dish_ingredients').delete().eq('dish_id', dishId);
       } else {
-        // Create new Dish
         const { data, error } = await client
           .from('dishes')
           .insert({ name: name.trim() })
@@ -73,10 +69,11 @@ export default function DishModal({ visible, dish, onClose }) {
         dishId = data.id;
       }
 
-      // Save ingredients
       const validIngredients = ingredients.filter(i => i.name.trim() !== '');
+
       for (const ing of validIngredients) {
         let ingredientId = ing.ingredientId;
+
         if (!ingredientId) {
           const { data: existing } = await client
             .from('ingredients')
@@ -87,11 +84,12 @@ export default function DishModal({ visible, dish, onClose }) {
           if (existing) {
             ingredientId = existing.id;
           } else {
-            const { data: newIng } = await client
+            const { data: newIng, error } = await client
               .from('ingredients')
-              .insert({ name: ing.name.trim()})
+              .insert({ name: ing.name.trim() })
               .select('id')
               .single();
+            if (error) throw error;
             ingredientId = newIng.id;
           }
         }
@@ -99,14 +97,12 @@ export default function DishModal({ visible, dish, onClose }) {
         await client.from('dish_ingredients').insert({
           dish_id: dishId,
           ingredient_id: ingredientId,
-          quantity: ing.quantity ? parseFloat(ing.quantity) : null,
-          unit: ing.unit.trim() || null,
         });
       }
 
       onClose();
     } catch (e) {
-      Alert.alert('Error', 'Could not save dish');
+      Alert.alert('Error', `Could not save dish: ${e.message}`);
     }
 
     setSaving(false);
@@ -121,7 +117,6 @@ export default function DishModal({ visible, dish, onClose }) {
         <View style={styles.sheet}>
           <Text style={styles.title}>{dish ? 'Edit dish' : 'New dish'}</Text>
 
-          {/* Dish */}
           <Text style={styles.label}>Dish name</Text>
           <TextInput
             style={styles.input}
@@ -131,29 +126,15 @@ export default function DishModal({ visible, dish, onClose }) {
             autoFocus
           />
 
-          {/* Ingredients */}
           <Text style={styles.label}>Ingredients</Text>
           <ScrollView style={styles.ingredientsList}>
             {ingredients.map((ing, index) => (
               <View key={index} style={styles.ingredientRow}>
                 <TextInput
-                  style={[styles.input, styles.nameInput]}
-                  placeholder="Name"
+                  style={[styles.input, styles.ingredientInput]}
+                  placeholder="Ingredient name"
                   value={ing.name}
-                  onChangeText={v => updateIngredient(index, 'name', v)}
-                />
-                <TextInput
-                  style={[styles.input, styles.qtyInput]}
-                  placeholder="Qty"
-                  value={ing.quantity}
-                  onChangeText={v => updateIngredient(index, 'quantity', v)}
-                  keyboardType="decimal-pad"
-                />
-                <TextInput
-                  style={[styles.input, styles.unitInput]}
-                  placeholder="Unit"
-                  value={ing.unit}
-                  onChangeText={v => updateIngredient(index, 'unit', v)}
+                  onChangeText={v => updateIngredient(index, v)}
                 />
                 <TouchableOpacity
                   style={styles.removeButton}
@@ -168,7 +149,6 @@ export default function DishModal({ visible, dish, onClose }) {
             </TouchableOpacity>
           </ScrollView>
 
-          {/* Buttons */}
           <View style={styles.footer}>
             <TouchableOpacity style={styles.cancelButton} onPress={onClose}>
               <Text style={styles.cancelText}>Cancel</Text>
@@ -188,14 +168,10 @@ export default function DishModal({ visible, dish, onClose }) {
 }
 
 const styles = StyleSheet.create({
-  overlay: {
-    flex: 1, justifyContent: 'flex-end',
-    backgroundColor: 'rgba(0,0,0,0.4)',
-  },
+  overlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.4)' },
   sheet: {
     backgroundColor: 'white', borderTopLeftRadius: 20,
-    borderTopRightRadius: 20, padding: 24,
-    maxHeight: '85%',
+    borderTopRightRadius: 20, padding: 24, maxHeight: '85%',
   },
   title: { fontSize: 20, fontWeight: 'bold', marginBottom: 20 },
   label: { fontSize: 13, color: 'gray', marginBottom: 6, marginTop: 12 },
@@ -204,10 +180,8 @@ const styles = StyleSheet.create({
     padding: 10, fontSize: 15, marginBottom: 8,
   },
   ingredientsList: { maxHeight: 280 },
-  ingredientRow: { flexDirection: 'row', gap: 6, alignItems: 'center' },
-  nameInput: { flex: 3 },
-  qtyInput: { flex: 1.5 },
-  unitInput: { flex: 1.5 },
+  ingredientRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  ingredientInput: { flex: 1 },
   removeButton: { padding: 8 },
   removeText: { color: '#e53935', fontSize: 16 },
   addIngredientButton: { paddingVertical: 10 },

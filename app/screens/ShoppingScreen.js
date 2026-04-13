@@ -18,12 +18,6 @@ function getCurrentWeek() {
   };
 }
 
-function formatQuantity(quantity, unit) {
-  if (!quantity && !unit) return null;
-  if (!quantity) return unit;
-  return `${quantity % 1 === 0 ? quantity : quantity.toFixed(1)}${unit ? ' ' + unit : ''}`;
-}
-
 async function fetchCurrentWeekId(client, year, week) {
   const { data } = await client
     .from('weeks')
@@ -72,49 +66,37 @@ async function syncShoppingItems(client, weekId, ingredientIds) {
       checked: false,
     }))
   );
-
   if (error) console.error('syncShoppingItems error:', error.message);
 }
 
 async function buildEnrichedItems(client, weekId, dishIds) {
   const { data: shoppingData, error } = await client
     .from('shopping_items')
-    .select('id, checked, checked_at, ingredient_id, ingredients(name)')
+    .select('id, checked, ingredient_id, ingredients(name)')
     .eq('week_id', weekId);
 
-  if (error) {
-    console.error('buildEnrichedItems fetch error:', error.message);
-    return [];
-  }
-
+  if (error) { console.error('buildEnrichedItems error:', error.message); return []; }
   if (!shoppingData || shoppingData.length === 0) return [];
-
-  if (dishIds.length === 0) return shoppingData.map(item => ({
-    ...item, dishCount: 0, quantity: null, unit: null
-  }));
+  if (dishIds.length === 0) return shoppingData.map(i => ({ ...i, dishes: [] }));
 
   const { data: dishIngredients } = await client
     .from('dish_ingredients')
-    .select('ingredient_id, quantity, unit')
+    .select('ingredient_id, dish_id, dishes(name)')
     .in('dish_id', dishIds);
 
-  const countMap = {};
-  const quantityMap = {};
-  const unitMap = {};
-
+  const dishesPerIngredient = {};
   (dishIngredients || []).forEach(di => {
     const key = di.ingredient_id;
-    countMap[key] = (countMap[key] || 0) + 1;
-    unitMap[key] = di.unit;
-    if (di.quantity) quantityMap[key] = (quantityMap[key] || 0) + di.quantity;
+    if (!dishesPerIngredient[key]) dishesPerIngredient[key] = [];
+    dishesPerIngredient[key].push(di.dishes.name);
   });
 
-  return shoppingData.map(item => ({
-    ...item,
-    dishCount: countMap[item.ingredient_id] || 1,
-    quantity: quantityMap[item.ingredient_id] || null,
-    unit: unitMap[item.ingredient_id] || null,
-  }));
+  return shoppingData
+    .map(item => ({
+      ...item,
+      dishes: dishesPerIngredient[item.ingredient_id] || [],
+    }))
+    .sort((a, b) => a.ingredients.name.localeCompare(b.ingredients.name));
 }
 
 async function cleanupPastWeeks(client, currentWeekId) {
@@ -130,10 +112,54 @@ async function cleanupPastWeeks(client, currentWeekId) {
       .from('week_plan')
       .select('id', { count: 'exact', head: true })
       .eq('week_id', w.id);
-    if (count === 0) {
-      await client.from('weeks').delete().eq('id', w.id);
-    }
+    if (count === 0) await client.from('weeks').delete().eq('id', w.id);
   }
+}
+
+function IngredientCard({ item, onToggle }) {
+  const [expanded, setExpanded] = useState(false);
+  const isChecked = item.checked;
+
+  function toggle() { setExpanded(prev => !prev); }
+
+  return (
+    <View style={[styles.card, isChecked && styles.cardChecked]}>
+      <View style={styles.cardHeader}>
+        <TouchableOpacity onPress={toggle} style={styles.cardLeft} activeOpacity={0.7}>
+          <Text style={styles.cardArrow}>{expanded ? '▾' : '▸'}</Text>
+          <View>
+            <Text style={[styles.cardName, isChecked && styles.cardNameChecked]}>
+              {item.ingredients.name}
+            </Text>
+            <Text style={[styles.cardCount, isChecked && styles.cardCountChecked]}>
+              {item.dishes.length} {item.dishes.length === 1 ? 'dish' : 'dishes'} this week
+            </Text>
+          </View>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.checkbox, isChecked && styles.checkboxChecked]}
+          onPress={() => onToggle(item)}
+          activeOpacity={0.7}
+        >
+          {isChecked && <Text style={styles.checkmark}>✓</Text>}
+        </TouchableOpacity>
+      </View>
+
+      {expanded && (
+        <View style={styles.cardBody}>
+          {item.dishes.map((dish, i) => (
+            <View key={i} style={styles.dishRow}>
+              <Ionicons name="restaurant-outline" size={13} color="#888" />
+              <Text style={[styles.dishName, isChecked && styles.dishNameChecked]}>
+                {dish}
+              </Text>
+            </View>
+          ))}
+        </View>
+      )}
+    </View>
+  );
 }
 
 export default function ShoppingScreen() {
@@ -141,19 +167,14 @@ export default function ShoppingScreen() {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
 
-    const loadShopping = useCallback(async () => {
+  const loadShopping = useCallback(async () => {
     setLoading(true);
     try {
       const client = await getClient();
       const { year, week } = getCurrentWeek();
 
       const weekId = await fetchCurrentWeekId(client, year, week);
-
-      if (!weekId) {
-        setItems([]);
-        setLoading(false);
-        return;
-      }
+      if (!weekId) { setItems([]); setLoading(false); return; }
 
       const dishIds = await fetchDishIds(client, weekId);
       const ingredientIds = await fetchIngredientIds(client, dishIds);
@@ -179,11 +200,7 @@ export default function ShoppingScreen() {
       channel = client
         .channel('shopping_sync')
         .on('postgres_changes',
-          {
-            event: '*',
-            schema: 'public',
-            table: 'shopping_items'
-          },
+          { event: '*', schema: 'public', table: 'shopping_items' },
           () => loadShopping()
         )
         .subscribe();
@@ -197,10 +214,7 @@ export default function ShoppingScreen() {
       const client = await getClient();
       const { error } = await client
         .from('shopping_items')
-        .update({
-          checked: !item.checked,
-          checked_at: !item.checked ? new Date().toISOString() : null
-        })
+        .update({ checked: !item.checked })
         .eq('id', item.id);
       if (error) throw error;
     } catch (e) {
@@ -216,7 +230,7 @@ export default function ShoppingScreen() {
       return;
     }
     const text = pending
-      .map(i => `${i.ingredients.name} x${i.dishCount}`)
+      .map(i => `${i.ingredients.name} x${i.dishes.length}`)
       .join('\n');
     await Clipboard.setStringAsync(text);
     Alert.alert('Copied!', 'Shopping list copied to clipboard.');
@@ -240,34 +254,7 @@ export default function ShoppingScreen() {
         </View>
       );
     }
-
-    const isChecked = item.checked;
-    const qty = formatQuantity(item.quantity, item.unit);
-
-    return (
-      <TouchableOpacity
-        style={[styles.row, isChecked && styles.rowChecked]}
-        onPress={() => toggleItem(item)}
-        activeOpacity={0.7}
-      >
-        <View style={[styles.checkbox, isChecked && styles.checkboxChecked]}>
-          {isChecked && <Text style={styles.checkmark}>✓</Text>}
-        </View>
-        <Text style={[styles.name, isChecked && styles.nameChecked]} numberOfLines={1}>
-          {item.ingredients.name}
-        </Text>
-        <View style={styles.meta}>
-          {qty && (
-            <Text style={[styles.quantity, isChecked && styles.metaChecked]}>{qty}</Text>
-          )}
-          <View style={[styles.badge, isChecked && styles.badgeChecked]}>
-            <Text style={[styles.badgeText, isChecked && styles.metaChecked]}>
-              ×{item.dishCount}
-            </Text>
-          </View>
-        </View>
-      </TouchableOpacity>
-    );
+    return <IngredientCard item={item} onToggle={toggleItem} />;
   }
 
   if (loading) {
@@ -343,15 +330,27 @@ const styles = StyleSheet.create({
 
   list: { padding: 12, paddingBottom: 32 },
 
-  row: {
-    flexDirection: 'row', alignItems: 'center',
+  card: {
     backgroundColor: 'white', borderRadius: 10,
-    paddingVertical: 12, paddingHorizontal: 14,
-    marginBottom: 6, gap: 12,
+    marginBottom: 6, overflow: 'hidden',
     shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05, shadowRadius: 2, elevation: 1,
   },
-  rowChecked: { backgroundColor: '#f0f0f0', shadowOpacity: 0, elevation: 0 },
+  cardChecked: { backgroundColor: '#f4f4f4', shadowOpacity: 0, elevation: 0 },
+
+  cardHeader: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingVertical: 12, paddingHorizontal: 14, gap: 12,
+  },
+  cardLeft: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 },
+  cardArrow: { fontSize: 14, color: '#aaa' },
+  cardName: { fontSize: 15, fontWeight: '600', color: '#1a1a1a' },
+  cardNameChecked: {
+    color: '#aaa', fontStyle: 'italic',
+    textDecorationLine: 'line-through', fontWeight: '400',
+  },
+  cardCount: { fontSize: 11, color: '#888', marginTop: 2 },
+  cardCountChecked: { color: '#bbb' },
 
   checkbox: {
     width: 22, height: 22, borderRadius: 6,
@@ -361,22 +360,13 @@ const styles = StyleSheet.create({
   checkboxChecked: { backgroundColor: '#4CAF50', borderColor: '#4CAF50' },
   checkmark: { fontSize: 13, color: 'white', fontWeight: '700' },
 
-  name: { flex: 1, fontSize: 15, color: '#1a1a1a', fontWeight: '500' },
-  nameChecked: {
-    color: '#aaa', fontStyle: 'italic',
-    textDecorationLine: 'line-through', fontWeight: '400',
+  cardBody: {
+    paddingHorizontal: 16, paddingBottom: 12,
+    borderTopWidth: 1, borderTopColor: '#f0f0f0', gap: 6,
   },
-
-  meta: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  quantity: { fontSize: 13, color: '#888', fontWeight: '500' },
-  metaChecked: { color: '#bbb' },
-
-  badge: {
-    backgroundColor: '#e8f5e9', borderRadius: 5,
-    paddingHorizontal: 6, paddingVertical: 2,
-  },
-  badgeChecked: { backgroundColor: '#e8e8e8' },
-  badgeText: { fontSize: 11, color: '#2e7d32', fontWeight: '700' },
+  dishRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  dishName: { fontSize: 13, color: '#555' },
+  dishNameChecked: { color: '#bbb', fontStyle: 'italic' },
 
   divider: {
     flexDirection: 'row', alignItems: 'center',

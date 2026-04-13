@@ -45,9 +45,6 @@ export default function DishCard({ dish, onEdit, onDelete }) {
             dish.dish_ingredients.map(di => (
               <View key={di.id} style={styles.ingredientRow}>
                 <Text style={styles.ingredientName}>{di.ingredients.name}</Text>
-                <Text style={styles.ingredientQty}>
-                  {di.quantity ? `${di.quantity}${di.unit ? ' ' + di.unit : ''}` : '—'}
-                </Text>
               </View>
             ))
           )}
@@ -59,48 +56,26 @@ export default function DishCard({ dish, onEdit, onDelete }) {
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: 'white',
-    borderRadius: 12,
-    marginBottom: 12,
-    elevation: 2,
-    overflow: 'hidden',
+    backgroundColor: 'white', borderRadius: 12,
+    marginBottom: 12, elevation: 2, overflow: 'hidden',
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 16,
-  },
+  header: { flexDirection: 'row', alignItems: 'center', padding: 16 },
   arrow: { fontSize: 16, color: 'gray', marginRight: 8 },
-  name: { flex: 1, fontSize: 17, fontWeight: '600' },
+  titleRow: { flex: 1 },
+  name: { fontSize: 17, fontWeight: '600', color: '#1a1a1a' },
+  lastUsed: { fontSize: 11, marginTop: 2 },
   actions: { flexDirection: 'row', gap: 4 },
-  editButton: {
-    padding: 6, borderRadius: 8,
-    backgroundColor: '#f0f0f0',
-  },
+  editButton: { padding: 6, borderRadius: 8, backgroundColor: '#f0f0f0' },
   editIcon: { fontSize: 16 },
-  deleteButton: {
-    padding: 6, borderRadius: 8,
-    backgroundColor: '#fdecea',
-  },
+  deleteButton: { padding: 6, borderRadius: 8, backgroundColor: '#fdecea' },
   deleteIcon: { fontSize: 16 },
   body: {
-    paddingHorizontal: 16,
-    paddingBottom: 16,
-    borderTopWidth: 1,
-    borderTopColor: '#f0f0f0',
+    paddingHorizontal: 16, paddingBottom: 16,
+    borderTopWidth: 1, borderTopColor: '#f0f0f0',
   },
   ingredientRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: 6,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f5f5f5',
+    paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: '#f5f5f5',
   },
   ingredientName: { fontSize: 15, color: '#333' },
-  ingredientQty: { fontSize: 15, color: 'gray' },
   noIngredients: { fontSize: 14, color: 'gray', fontStyle: 'italic', paddingVertical: 8 },
-  titleRow: {
-    flex: 1, flexDirection: 'column', justifyContent: 'center',
-  },
-  name: { fontSize: 16, fontWeight: '600', color: '#1a1a1a' },
-  lastUsed: { fontSize: 11, marginTop: 2 },});
+});
