@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, LayoutAnimation } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 
 export default function DishCard({ dish, onEdit, onDelete }) {
   const [expanded, setExpanded] = useState(false);
@@ -22,17 +23,20 @@ export default function DishCard({ dish, onEdit, onDelete }) {
   return (
     <View style={styles.card}>
       <TouchableOpacity style={styles.header} onPress={toggle} activeOpacity={0.7}>
-        <Text style={styles.arrow}>{expanded ? '▾' : '▸'}</Text>
+        <Ionicons
+          name={expanded ? 'chevron-down' : 'chevron-forward'}
+          size={16} color="#aaa" style={styles.arrow}
+        />
         <View style={styles.titleRow}>
           <Text style={styles.name}>{dish.name}</Text>
           <Text style={[styles.lastUsed, { color }]}>{text}</Text>
         </View>
         <View style={styles.actions}>
           <TouchableOpacity style={styles.editButton} onPress={onEdit}>
-            <Text style={styles.editIcon}>✏️</Text>
+            <Ionicons name="pencil" size={16} color="#555" />
           </TouchableOpacity>
           <TouchableOpacity style={styles.deleteButton} onPress={onDelete}>
-            <Text style={styles.deleteIcon}>🗑️</Text>
+            <Ionicons name="trash-outline" size={16} color="#e53935" />
           </TouchableOpacity>
         </View>
       </TouchableOpacity>
@@ -60,15 +64,13 @@ const styles = StyleSheet.create({
     marginBottom: 12, elevation: 2, overflow: 'hidden',
   },
   header: { flexDirection: 'row', alignItems: 'center', padding: 16 },
-  arrow: { fontSize: 16, color: 'gray', marginRight: 8 },
+  arrow: { marginRight: 8 },
   titleRow: { flex: 1 },
   name: { fontSize: 17, fontWeight: '600', color: '#1a1a1a' },
   lastUsed: { fontSize: 11, marginTop: 2 },
   actions: { flexDirection: 'row', gap: 4 },
   editButton: { padding: 6, borderRadius: 8, backgroundColor: '#f0f0f0' },
-  editIcon: { fontSize: 16 },
   deleteButton: { padding: 6, borderRadius: 8, backgroundColor: '#fdecea' },
-  deleteIcon: { fontSize: 16 },
   body: {
     paddingHorizontal: 16, paddingBottom: 16,
     borderTopWidth: 1, borderTopColor: '#f0f0f0',

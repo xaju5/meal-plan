@@ -26,7 +26,7 @@ CREATE TABLE week_plan (
   week_id UUID NOT NULL REFERENCES weeks(id) ON DELETE CASCADE,
   day TEXT NOT NULL,
   slot TEXT NOT NULL,
-  dish_id UUID REFERENCES dishes(id) ON DELETE SET NULL,
+  dish_id UUID REFERENCES dishes(id) ON DELETE CASCADE,
   UNIQUE (week_id, day, slot)
 );
 

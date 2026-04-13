@@ -1,9 +1,12 @@
 import { useState, useEffect } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, Modal,
-  StyleSheet, ScrollView, Alert, KeyboardAvoidingView, Platform
+  StyleSheet, ScrollView, Alert,
+  KeyboardAvoidingView, Platform
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { getClient } from '../lib/supabase';
+import IngredientAutocomplete from './IngredientAutocomplete';
 
 export default function DishModal({ visible, dish, onClose }) {
   const [name, setName] = useState('');
@@ -16,9 +19,9 @@ export default function DishModal({ visible, dish, onClose }) {
         setName(dish.name);
         setIngredients(
           dish.dish_ingredients.map(di => ({
-            id: di.id,
             ingredientId: di.ingredients.id,
             name: di.ingredients.name,
+            isNew: false,
           }))
         );
       } else {
@@ -28,16 +31,12 @@ export default function DishModal({ visible, dish, onClose }) {
     }
   }, [visible, dish]);
 
-  function addIngredient() {
-    setIngredients(prev => [...prev, { name: '' }]);
-  }
-
-  function updateIngredient(index, value) {
-    setIngredients(prev => {
-      const updated = [...prev];
-      updated[index] = { ...updated[index], name: value };
-      return updated;
-    });
+  function handleSelectIngredient(ingredient) {
+    const alreadyAdded = ingredients.some(
+      i => i.name.toLowerCase() === ingredient.name.toLowerCase()
+    );
+    if (alreadyAdded) return;
+    setIngredients(prev => [...prev, ingredient]);
   }
 
   function removeIngredient(index) {
@@ -56,7 +55,11 @@ export default function DishModal({ visible, dish, onClose }) {
       let dishId;
 
       if (dish) {
-        await client.from('dishes').update({ name: name.trim() }).eq('id', dish.id);
+        const { error } = await client
+          .from('dishes')
+          .update({ name: name.trim() })
+          .eq('id', dish.id);
+        if (error) throw error;
         dishId = dish.id;
         await client.from('dish_ingredients').delete().eq('dish_id', dishId);
       } else {
@@ -69,9 +72,7 @@ export default function DishModal({ visible, dish, onClose }) {
         dishId = data.id;
       }
 
-      const validIngredients = ingredients.filter(i => i.name.trim() !== '');
-
-      for (const ing of validIngredients) {
+      for (const ing of ingredients) {
         let ingredientId = ing.ingredientId;
 
         if (!ingredientId) {
@@ -94,10 +95,11 @@ export default function DishModal({ visible, dish, onClose }) {
           }
         }
 
-        await client.from('dish_ingredients').insert({
+        const { error } = await client.from('dish_ingredients').insert({
           dish_id: dishId,
           ingredient_id: ingredientId,
         });
+        if (error) throw error;
       }
 
       onClose();
@@ -120,33 +122,34 @@ export default function DishModal({ visible, dish, onClose }) {
           <Text style={styles.label}>Dish name</Text>
           <TextInput
             style={styles.input}
-            placeholder="e.g. Tortilla de patatas"
+            placeholder="e.g. Pasta carbonara"
             value={name}
             onChangeText={setName}
             autoFocus
           />
 
           <Text style={styles.label}>Ingredients</Text>
-          <ScrollView style={styles.ingredientsList}>
+          <IngredientAutocomplete onSelect={handleSelectIngredient} />
+
+          <ScrollView
+            style={styles.tagList}
+            keyboardShouldPersistTaps="handled"
+          >
+            {ingredients.length === 0 && (
+              <Text style={styles.noIngredients}>No ingredients added yet</Text>
+            )}
             {ingredients.map((ing, index) => (
-              <View key={index} style={styles.ingredientRow}>
-                <TextInput
-                  style={[styles.input, styles.ingredientInput]}
-                  placeholder="Ingredient name"
-                  value={ing.name}
-                  onChangeText={v => updateIngredient(index, v)}
-                />
+              <View key={index} style={styles.tag}>
+                <Text style={styles.tagText}>{ing.name}</Text>
+                {ing.isNew && <Text style={styles.tagNew}>new</Text>}
                 <TouchableOpacity
-                  style={styles.removeButton}
                   onPress={() => removeIngredient(index)}
+                  style={styles.tagRemove}
                 >
-                  <Text style={styles.removeText}>✕</Text>
+                  <Ionicons name="close" size={14} color="#888" />
                 </TouchableOpacity>
               </View>
             ))}
-            <TouchableOpacity style={styles.addIngredientButton} onPress={addIngredient}>
-              <Text style={styles.addIngredientText}>+ Add ingredient</Text>
-            </TouchableOpacity>
           </ScrollView>
 
           <View style={styles.footer}>
@@ -171,21 +174,29 @@ const styles = StyleSheet.create({
   overlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.4)' },
   sheet: {
     backgroundColor: 'white', borderTopLeftRadius: 20,
-    borderTopRightRadius: 20, padding: 24, maxHeight: '85%',
+    borderTopRightRadius: 20, padding: 24, maxHeight: '90%',
   },
   title: { fontSize: 20, fontWeight: 'bold', marginBottom: 20 },
   label: { fontSize: 13, color: 'gray', marginBottom: 6, marginTop: 12 },
   input: {
     borderWidth: 1, borderColor: '#ddd', borderRadius: 8,
-    padding: 10, fontSize: 15, marginBottom: 8,
+    padding: 10, fontSize: 15, marginBottom: 4,
   },
-  ingredientsList: { maxHeight: 280 },
-  ingredientRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  ingredientInput: { flex: 1 },
-  removeButton: { padding: 8 },
-  removeText: { color: '#e53935', fontSize: 16 },
-  addIngredientButton: { paddingVertical: 10 },
-  addIngredientText: { color: '#4CAF50', fontSize: 15 },
+  tagList: { maxHeight: 200, marginTop: 8 },
+  tag: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: '#f0faf0', borderRadius: 8,
+    paddingVertical: 8, paddingHorizontal: 12,
+    marginBottom: 6, gap: 8,
+  },
+  tagText: { flex: 1, fontSize: 14, color: '#2e7d32', fontWeight: '500' },
+  tagNew: {
+    fontSize: 10, color: '#4CAF50', fontWeight: '700',
+    borderWidth: 1, borderColor: '#4CAF50',
+    borderRadius: 4, paddingHorizontal: 5, paddingVertical: 1,
+  },
+  tagRemove: { padding: 2 },
+  noIngredients: { fontSize: 13, color: '#bbb', fontStyle: 'italic', paddingVertical: 8 },
   footer: { flexDirection: 'row', gap: 12, marginTop: 16 },
   cancelButton: {
     flex: 1, padding: 14, borderRadius: 8,
