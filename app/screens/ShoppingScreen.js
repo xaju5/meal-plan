@@ -47,26 +47,37 @@ async function fetchIngredientIds(client, dishIds) {
 }
 
 async function syncShoppingItems(client, weekId, ingredientIds) {
-  if (ingredientIds.length === 0) return;
-
   const { data: existing } = await client
     .from('shopping_items')
-    .select('ingredient_id')
+    .select('id, ingredient_id')
     .eq('week_id', weekId);
 
-  const existingIds = new Set((existing || []).map(e => e.ingredient_id));
-  const toInsert = ingredientIds.filter(id => !existingIds.has(id));
+  const existingMap = new Map((existing || []).map(e => [e.ingredient_id, e.id]));
+  const incomingSet = new Set(ingredientIds);
 
-  if (toInsert.length === 0) return;
+  const toInsert = ingredientIds.filter(id => !existingMap.has(id));
+  const toDelete = [...existingMap.entries()]
+    .filter(([ingredient_id]) => !incomingSet.has(ingredient_id))
+    .map(([, id]) => id);
 
-  const { error } = await client.from('shopping_items').insert(
-    toInsert.map(ingredient_id => ({
-      week_id: weekId,
-      ingredient_id,
-      checked: false,
-    }))
-  );
-  if (error) console.error('syncShoppingItems error:', error.message);
+    if (toDelete.length > 0) {
+    const { error } = await client
+      .from('shopping_items')
+      .delete()
+      .in('id', toDelete);
+    if (error) console.error('syncShoppingItems delete error:', error.message);
+  }
+
+  if (toInsert.length > 0) {
+    const { error } = await client.from('shopping_items').insert(
+      toInsert.map(ingredient_id => ({
+        week_id: weekId,
+        ingredient_id,
+        checked: false,
+      }))
+    );
+    if (error) console.error('syncShoppingItems insert error:', error.message);
+  }
 }
 
 async function buildEnrichedItems(client, weekId, dishIds) {
@@ -79,16 +90,28 @@ async function buildEnrichedItems(client, weekId, dishIds) {
   if (!shoppingData || shoppingData.length === 0) return [];
   if (dishIds.length === 0) return shoppingData.map(i => ({ ...i, dishes: [] }));
 
+  const { data: weekPlanData } = await client
+    .from('week_plan')
+    .select('dish_id, dishes(name)')
+    .eq('week_id', weekId)
+    .not('dish_id', 'is', null);
+
   const { data: dishIngredients } = await client
     .from('dish_ingredients')
-    .select('ingredient_id, dish_id, dishes(name)')
+    .select('ingredient_id, dish_id')
     .in('dish_id', dishIds);
+
+  const dishNamesBySlot = (weekPlanData || []).map(wp => ({
+    dish_id: wp.dish_id,
+    name: wp.dishes.name,
+  }));
 
   const dishesPerIngredient = {};
   (dishIngredients || []).forEach(di => {
     const key = di.ingredient_id;
     if (!dishesPerIngredient[key]) dishesPerIngredient[key] = [];
-    dishesPerIngredient[key].push(di.dishes.name);
+    const matchingSlots = dishNamesBySlot.filter(d => d.dish_id === di.dish_id);
+    dishesPerIngredient[key].push(...matchingSlots.map(d => d.name));
   });
 
   return shoppingData
@@ -209,18 +232,25 @@ export default function ShoppingScreen() {
   }, [loadShopping]);
 
   async function toggleItem(item) {
-    setSyncing(true);
+    const newChecked = !item.checked;
+
+    setItems(prev => prev.map(i =>
+      i.id === item.id ? { ...i, checked: newChecked } : i
+    ));
+
     try {
       const client = await getClient();
       const { error } = await client
         .from('shopping_items')
-        .update({ checked: !item.checked })
+        .update({ checked: newChecked })
         .eq('id', item.id);
       if (error) throw error;
     } catch (e) {
+      setItems(prev => prev.map(i =>
+        i.id === item.id ? { ...i, checked: item.checked } : i
+      ));
       Alert.alert('Error', 'Could not update item');
     }
-    setSyncing(false);
   }
 
   async function exportToClipboard() {
