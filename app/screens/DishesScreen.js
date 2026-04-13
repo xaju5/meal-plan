@@ -26,30 +26,51 @@ export default function DishesScreen() {
   const [editingDish, setEditingDish] = useState(null);
 
   const loadDishes = useCallback(async () => {
-    const client = await getClient();
+    setLoading(true);
+    try {
+      const client = await getClient();
 
-    const [{ data: dishesData }, { data: weekPlanData }] = await Promise.all([
-      client
-        .from('dishes')
-        .select(`id, name, dish_ingredients(id, ingredients(id, name))`)
-        .order('name'),
-      client
-        .from('week_plan')
-        .select('dish_id, weeks(year, week_number)')
-        .not('dish_id', 'is', null)
-    ]);
+      const [{ data: dishesData, error: dishesError }, { data: weekPlanData, error: weekPlanError }] =
+        await Promise.all([
+          client
+            .from('dishes')
+            .select('id, name, dish_ingredients(id, ingredients(id, name))')
+            .order('name'),
+          client
+            .from('week_plan')
+            .select('dish_id, weeks(year, week_number)')
+            .not('dish_id', 'is', null)
+        ]);
 
-    const { year: currentYear, week: currentWeek } = getCurrentWeek();
-    const enriched = (dishesData || []).map(dish => {
-      const last = lastUsedMap[dish.id];
-      let weeksAgo = null;
-      if (last) {
-        weeksAgo = (currentYear - last.year) * 52 + (currentWeek - last.week_number);
-      }
-      return { ...dish, weeksAgo };
-    });
+      if (dishesError) throw new Error(`Failed to load dishes: ${dishesError.message}`);
+      if (weekPlanError) throw new Error(`Failed to load week plan: ${weekPlanError.message}`);
 
-    setDishes(enriched);
+      const lastUsedMap = {};
+      (weekPlanData || []).forEach(entry => {
+        const { dish_id, weeks } = entry;
+        if (!weeks) return;
+        const prev = lastUsedMap[dish_id];
+        if (!prev || weeks.year > prev.year ||
+          (weeks.year === prev.year && weeks.week_number > prev.week_number)) {
+          lastUsedMap[dish_id] = weeks;
+        }
+      });
+
+      const { year: currentYear, week: currentWeek } = getCurrentWeek();
+
+      const enriched = (dishesData || []).map(dish => {
+        const last = lastUsedMap[dish.id];
+        const weeksAgo = last
+          ? (currentYear - last.year) * 52 + (currentWeek - last.week_number)
+          : null;
+        return { ...dish, weeksAgo };
+      });
+
+      setDishes(enriched);
+    } catch (e) {
+      console.error('loadDishes error:', e.message);
+      Alert.alert('Error', 'Could not load dishes. Pull down to try again.');
+    }
     setLoading(false);
   }, []);
 
