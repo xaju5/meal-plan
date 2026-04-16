@@ -1,19 +1,11 @@
 import { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, LayoutAnimation } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { getWeeksAgoLabel } from '../hooks/useLastUsedLabel';
 
 export default function DishCard({ dish, onEdit, onDelete }) {
   const [expanded, setExpanded] = useState(false);
-
-  function getLastUsedLabel(weeksAgo) {
-    if (weeksAgo === null) return { text: 'never used', color: '#bbb' };
-    if (weeksAgo === 0) return { text: 'this week', color: '#4CAF50' };
-    if (weeksAgo === 1) return { text: '1 week ago', color: '#8bc34a' };
-    if (weeksAgo <= 4) return { text: `${weeksAgo} weeks ago`, color: '#ff9800' };
-    return { text: 'over a month ago', color: '#e53935' };
-  }
-
-  const { text, color } = getLastUsedLabel(dish.weeksAgo);
+  const { text, color } = getWeeksAgoLabel(dish.weeksAgo);
 
   function toggle() {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);

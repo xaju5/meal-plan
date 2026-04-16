@@ -1,10 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, TouchableWithoutFeedback,
-  StyleSheet, Alert, ActivityIndicator, Modal, FlatList, RefreshControl
+  StyleSheet, Alert, ActivityIndicator, Modal, FlatList, RefreshControl,
+  TextInput
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { getClient } from '../lib/supabase';
+import { getWeeksAgoLabel, computeWeeksAgo } from '../hooks/useLastUsedLabel';
 
 const DAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
 const DAY_LABELS = {
@@ -76,20 +78,43 @@ export default function WeekScreen() {
   const [dishes, setDishes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectingSlot, setSelectingSlot] = useState(null);
+  const [searchQuery, setSearchQuery] = useState('');
 
   const isCurrentWeek = year === current.year && week === current.week;
   const past = isPastWeek(year, week, current);
+
+  const filteredDishes = dishes.filter(d =>
+      d.name.toLowerCase().includes(searchQuery.toLowerCase())
+    );
 
   const loadWeek = useCallback(async () => {
     setLoading(true);
     const client = await getClient();
 
-    const [{ data: dishesData }, { data: weekData }] = await Promise.all([
+    const [{ data: dishesData }, { data: weekData }, { data: allWeekPlan }] = await Promise.all([
       client.from('dishes').select('id, name').order('name'),
-      client.from('weeks').select('id').eq('year', year).eq('week_number', week).single()
+      client.from('weeks').select('id').eq('year', year).eq('week_number', week).single(),
+      client.from('week_plan').select('dish_id, weeks(year, week_number)').not('dish_id', 'is', null)
     ]);
 
-    setDishes(dishesData || []);
+    
+    const lastUsedMap = {};
+    (allWeekPlan || []).forEach(entry => {
+      const { dish_id, weeks: w } = entry;
+      if (!w) return;
+      const prev = lastUsedMap[dish_id];
+      if (!prev || w.year > prev.year ||
+        (w.year === prev.year && w.week_number > prev.week_number)) {
+        lastUsedMap[dish_id] = w;
+      }
+    });
+
+    const enrichedDishes = (dishesData || []).map(dish => ({
+      ...dish,
+      weeksAgo: computeWeeksAgo(lastUsedMap[dish.id], year, week)
+    }));
+
+    setDishes(enrichedDishes);
 
     if (!weekData) {
       setWeekId(null);
@@ -183,10 +208,12 @@ export default function WeekScreen() {
         if (error) throw error;
       }
       setSelectingSlot(null);
+      setSearchQuery('');
       await loadWeek();
     } catch (e) {
       Alert.alert('Error', `Could not assign dish: ${e.message}`);
       setSelectingSlot(null);
+      setSearchQuery('');
     }
   }
 
@@ -309,30 +336,63 @@ export default function WeekScreen() {
       )}
 
       <Modal visible={!!selectingSlot} transparent animationType="slide">
-        <TouchableWithoutFeedback onPress={() => setSelectingSlot(null)}>
+        <TouchableWithoutFeedback onPress={() => { setSelectingSlot(null); setSearchQuery(''); }}>
           <View style={styles.modalOverlay}>
             <TouchableWithoutFeedback onPress={() => {}}>
-                <View style={styles.modalSheet}>
-                  <View style={styles.modalHandle} />
-                  <Text style={styles.modalTitle}>Select a dish</Text>
-                  <FlatList
-                    data={dishes}
-                    keyExtractor={d => d.id}
-                    ListEmptyComponent={
-                      <Text style={styles.modalEmpty}>No dishes yet. Add some in the Dishes tab.</Text>
-                    }
-                    renderItem={({ item }) => (
-                      <TouchableOpacity style={styles.modalItem} onPress={() => handleSelectDish(item)}>
-                        <Text style={styles.modalItemText}>{item.name}</Text>
+              <View style={styles.modalSheet}>
+                <View style={styles.modalHandle} />
+                <Text style={styles.modalTitle}>Select a dish</Text>
+
+                <View style={styles.searchContainer}>
+                  <Ionicons name="search-outline" size={16} color="#aaa" style={styles.searchIcon} />
+                  <TextInput
+                    style={styles.searchInput}
+                    placeholder="Search dishes..."
+                    value={searchQuery}
+                    onChangeText={setSearchQuery}
+                    autoCorrect={false}
+                  />
+                  {searchQuery !== '' && (
+                    <TouchableOpacity onPress={() => setSearchQuery('')}>
+                      <Ionicons name="close-circle" size={16} color="#aaa" />
+                    </TouchableOpacity>
+                  )}
+                </View>
+
+                <FlatList
+                  data={filteredDishes}
+                  keyExtractor={d => d.id}
+                  keyboardShouldPersistTaps="handled"
+                  ListEmptyComponent={
+                    <Text style={styles.modalEmpty}>
+                      {searchQuery ? 'No dishes match your search' : 'No dishes yet. Add some in the Dishes tab.'}
+                    </Text>
+                  }
+                  renderItem={({ item }) => {
+                    const { text, color } = getWeeksAgoLabel(item.weeksAgo);
+                    return (
+                      <TouchableOpacity
+                        style={styles.modalItem}
+                        onPress={() => handleSelectDish(item)}
+                      >
+                        <View style={styles.modalItemContent}>
+                          <Text style={styles.modalItemText}>{item.name}</Text>
+                          <Text style={[styles.modalItemSub, { color }]}>{text}</Text>
+                        </View>
                         <Ionicons name="add-circle-outline" size={22} color="#4CAF50" />
                       </TouchableOpacity>
-                    )}
-                  />
-                  <TouchableOpacity style={styles.modalCancel} onPress={() => setSelectingSlot(null)}>
-                    <Text style={styles.modalCancelText}>Cancel</Text>
-                  </TouchableOpacity>
-                </View>
-              </TouchableWithoutFeedback>
+                    );
+                  }}
+                />
+
+                <TouchableOpacity
+                  style={styles.modalCancel}
+                  onPress={() => { setSelectingSlot(null); setSearchQuery(''); }}
+                >
+                  <Text style={styles.modalCancelText}>Cancel</Text>
+                </TouchableOpacity>
+              </View>
+            </TouchableWithoutFeedback>
           </View>
         </TouchableWithoutFeedback>
       </Modal>
@@ -450,4 +510,14 @@ const styles = StyleSheet.create({
     borderRadius: 10, backgroundColor: '#f5f5f5',
   },
   modalCancelText: { fontSize: 15, color: '#888', fontWeight: '600' },
+  searchContainer: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: '#f5f5f5', borderRadius: 10,
+    paddingHorizontal: 10, marginBottom: 12, gap: 6,
+  },
+  searchIcon: { flexShrink: 0 },
+  searchInput: { flex: 1, paddingVertical: 9, fontSize: 14 },
+  modalItemContent: { flex: 1 },
+  modalItemText: { fontSize: 15, color: '#222' },
+  modalItemSub: { fontSize: 11, marginTop: 2 },
 });

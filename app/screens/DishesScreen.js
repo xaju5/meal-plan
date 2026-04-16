@@ -6,6 +6,7 @@ import {
 import { getClient } from '../lib/supabase';
 import DishCard from '../components/DishCard';
 import DishModal from '../components/DishModal';
+import { getWeeksAgoLabel, computeWeeksAgo } from '../hooks/useLastUsedLabel';
 
 function getCurrentWeek() {
   const d = new Date();
@@ -58,13 +59,10 @@ export default function DishesScreen() {
 
       const { year: currentYear, week: currentWeek } = getCurrentWeek();
 
-      const enriched = (dishesData || []).map(dish => {
-        const last = lastUsedMap[dish.id];
-        const weeksAgo = last
-          ? (currentYear - last.year) * 52 + (currentWeek - last.week_number)
-          : null;
-        return { ...dish, weeksAgo };
-      });
+      const enriched = (dishesData || []).map(dish => ({
+        ...dish,
+        weeksAgo: computeWeeksAgo(lastUsedMap[dish.id], currentYear, currentWeek)
+      }));
 
       setDishes(enriched);
     } catch (e) {
