@@ -1,8 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
-  View, Text, ScrollView, TouchableOpacity,
-  StyleSheet, Alert, ActivityIndicator, Modal,
-  FlatList, RefreshControl
+  View, Text, ScrollView, TouchableOpacity, TouchableWithoutFeedback,
+  StyleSheet, Alert, ActivityIndicator, Modal, FlatList, RefreshControl
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { getClient } from '../lib/supabase';
@@ -310,28 +309,32 @@ export default function WeekScreen() {
       )}
 
       <Modal visible={!!selectingSlot} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalSheet}>
-            <View style={styles.modalHandle} />
-            <Text style={styles.modalTitle}>Select a dish</Text>
-            <FlatList
-              data={dishes}
-              keyExtractor={d => d.id}
-              ListEmptyComponent={
-                <Text style={styles.modalEmpty}>No dishes yet. Add some in the Dishes tab.</Text>
-              }
-              renderItem={({ item }) => (
-                <TouchableOpacity style={styles.modalItem} onPress={() => handleSelectDish(item)}>
-                  <Text style={styles.modalItemText}>{item.name}</Text>
-                  <Ionicons name="add-circle-outline" size={22} color="#4CAF50" />
-                </TouchableOpacity>
-              )}
-            />
-            <TouchableOpacity style={styles.modalCancel} onPress={() => setSelectingSlot(null)}>
-              <Text style={styles.modalCancelText}>Cancel</Text>
-            </TouchableOpacity>
+        <TouchableWithoutFeedback onPress={() => setSelectingSlot(null)}>
+          <View style={styles.modalOverlay}>
+            <TouchableWithoutFeedback onPress={() => {}}>
+                <View style={styles.modalSheet}>
+                  <View style={styles.modalHandle} />
+                  <Text style={styles.modalTitle}>Select a dish</Text>
+                  <FlatList
+                    data={dishes}
+                    keyExtractor={d => d.id}
+                    ListEmptyComponent={
+                      <Text style={styles.modalEmpty}>No dishes yet. Add some in the Dishes tab.</Text>
+                    }
+                    renderItem={({ item }) => (
+                      <TouchableOpacity style={styles.modalItem} onPress={() => handleSelectDish(item)}>
+                        <Text style={styles.modalItemText}>{item.name}</Text>
+                        <Ionicons name="add-circle-outline" size={22} color="#4CAF50" />
+                      </TouchableOpacity>
+                    )}
+                  />
+                  <TouchableOpacity style={styles.modalCancel} onPress={() => setSelectingSlot(null)}>
+                    <Text style={styles.modalCancelText}>Cancel</Text>
+                  </TouchableOpacity>
+                </View>
+              </TouchableWithoutFeedback>
           </View>
-        </View>
+        </TouchableWithoutFeedback>
       </Modal>
     </View>
   );

@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react';
 import {
-  View, Text, TextInput, TouchableOpacity, Modal,
-  StyleSheet, ScrollView, Alert,
-  KeyboardAvoidingView, Platform
+  View, Text, TextInput, TouchableOpacity, TouchableWithoutFeedback,
+  Modal, StyleSheet, ScrollView, Alert, KeyboardAvoidingView, Platform
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { getClient } from '../lib/supabase';
@@ -112,60 +111,61 @@ export default function DishModal({ visible, dish, onClose }) {
 
   return (
     <Modal visible={visible} animationType="slide" transparent>
-      <KeyboardAvoidingView
-        style={styles.overlay}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >
-        <View style={styles.sheet}>
-          <Text style={styles.title}>{dish ? 'Edit dish' : 'New dish'}</Text>
+      <TouchableWithoutFeedback onPress={onClose}>
+        <View style={styles.overlay}>
+          <TouchableWithoutFeedback onPress={() => {}}>
+              <View style={styles.sheet}>
+                <Text style={styles.title}>{dish ? 'Edit dish' : 'New dish'}</Text>
 
-          <Text style={styles.label}>Dish name</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="e.g. Pasta carbonara"
-            value={name}
-            onChangeText={setName}
-            autoFocus
-          />
+                <Text style={styles.label}>Dish name</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="e.g. Pasta carbonara"
+                  value={name}
+                  onChangeText={setName}
+                  autoFocus
+                />
 
-          <Text style={styles.label}>Ingredients</Text>
-          <IngredientAutocomplete onSelect={handleSelectIngredient} />
+                <Text style={styles.label}>Ingredients</Text>
+                <IngredientAutocomplete onSelect={handleSelectIngredient} />
 
-          <ScrollView
-            style={styles.tagList}
-            keyboardShouldPersistTaps="handled"
-          >
-            {ingredients.length === 0 && (
-              <Text style={styles.noIngredients}>No ingredients added yet</Text>
-            )}
-            {ingredients.map((ing, index) => (
-              <View key={index} style={styles.tag}>
-                <Text style={styles.tagText}>{ing.name}</Text>
-                {ing.isNew && <Text style={styles.tagNew}>new</Text>}
-                <TouchableOpacity
-                  onPress={() => removeIngredient(index)}
-                  style={styles.tagRemove}
+                <ScrollView
+                  style={styles.tagList}
+                  keyboardShouldPersistTaps="handled"
                 >
-                  <Ionicons name="close" size={14} color="#888" />
-                </TouchableOpacity>
-              </View>
-            ))}
-          </ScrollView>
+                  {ingredients.length === 0 && (
+                    <Text style={styles.noIngredients}>No ingredients added yet</Text>
+                  )}
+                  {ingredients.map((ing, index) => (
+                    <View key={index} style={styles.tag}>
+                      <Text style={styles.tagText}>{ing.name}</Text>
+                      {ing.isNew && <Text style={styles.tagNew}>new</Text>}
+                      <TouchableOpacity
+                        onPress={() => removeIngredient(index)}
+                        style={styles.tagRemove}
+                      >
+                        <Ionicons name="close" size={14} color="#888" />
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+                </ScrollView>
 
-          <View style={styles.footer}>
-            <TouchableOpacity style={styles.cancelButton} onPress={onClose}>
-              <Text style={styles.cancelText}>Cancel</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.saveButton, saving && styles.disabled]}
-              onPress={handleSave}
-              disabled={saving}
-            >
-              <Text style={styles.saveText}>{saving ? 'Saving...' : 'Save'}</Text>
-            </TouchableOpacity>
-          </View>
+                <View style={styles.footer}>
+                  <TouchableOpacity style={styles.cancelButton} onPress={onClose}>
+                    <Text style={styles.cancelText}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.saveButton, saving && styles.disabled]}
+                    onPress={handleSave}
+                    disabled={saving}
+                  >
+                    <Text style={styles.saveText}>{saving ? 'Saving...' : 'Save'}</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+              </TouchableWithoutFeedback>
         </View>
-      </KeyboardAvoidingView>
+      </TouchableWithoutFeedback>
     </Modal>
   );
 }
