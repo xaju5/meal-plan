@@ -7,9 +7,10 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import { getClient } from '../lib/supabase';
 
-function getCurrentWeek() {
+function getWeekNumber(offsetWeeks = 0) {
   const d = new Date();
   d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() + offsetWeeks * 7);
   d.setDate(d.getDate() + 4 - (d.getDay() || 7));
   const yearStart = new Date(d.getFullYear(), 0, 1);
   return {
@@ -18,14 +19,36 @@ function getCurrentWeek() {
   };
 }
 
-async function fetchCurrentWeekId(client, year, week) {
-  const { data } = await client
+function getWeekLabel(year, week) {
+  const jan1 = new Date(year, 0, 1);
+  const monday = new Date(jan1);
+  monday.setDate(jan1.getDate() + (week - 1) * 7 - (jan1.getDay() || 7) + 1);
+  const sunday = new Date(monday);
+  sunday.setDate(monday.getDate() + 6);
+  const fmt = d => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+  return `${fmt(monday)} – ${fmt(sunday)}`;
+}
+
+function isPastWeek(year, week, current) {
+  return year < current.year || (year === current.year && week < current.week);
+}
+
+async function fetchOrCreateWeekId(client, year, week) {
+  const { data: existing } = await client
     .from('weeks')
     .select('id')
     .eq('year', year)
     .eq('week_number', week)
     .single();
-  return data?.id || null;
+  if (existing) return existing.id;
+
+  const { data, error } = await client
+    .from('weeks')
+    .insert({ year, week_number: week })
+    .select('id')
+    .single();
+  if (error) throw error;
+  return data.id;
 }
 
 async function fetchDishIds(client, weekId) {
@@ -60,21 +83,15 @@ async function syncShoppingItems(client, weekId, ingredientIds) {
     .filter(([ingredient_id]) => !incomingSet.has(ingredient_id))
     .map(([, id]) => id);
 
-    if (toDelete.length > 0) {
+  if (toDelete.length > 0) {
     const { error } = await client
-      .from('shopping_items')
-      .delete()
-      .in('id', toDelete);
+      .from('shopping_items').delete().in('id', toDelete);
     if (error) console.error('syncShoppingItems delete error:', error.message);
   }
 
   if (toInsert.length > 0) {
     const { error } = await client.from('shopping_items').insert(
-      toInsert.map(ingredient_id => ({
-        week_id: weekId,
-        ingredient_id,
-        checked: false,
-      }))
+      toInsert.map(ingredient_id => ({ week_id: weekId, ingredient_id, checked: false }))
     );
     if (error) console.error('syncShoppingItems insert error:', error.message);
   }
@@ -122,20 +139,24 @@ async function buildEnrichedItems(client, weekId, dishIds) {
     .sort((a, b) => a.ingredients.name.localeCompare(b.ingredients.name));
 }
 
-async function cleanupPastWeeks(client, currentWeekId) {
-  const { data: oldWeeks } = await client
-    .from('weeks')
-    .select('id')
-    .neq('id', currentWeekId);
+async function cleanupPastWeeks(client, currentYear, currentWeek) {
+  const { data: allWeeks } = await client.from('weeks').select('id, year, week_number');
+  if (!allWeeks) return;
 
-  if (!oldWeeks || oldWeeks.length === 0) return;
+  const pastWeeks = allWeeks.filter(w => isPastWeek(w.year, w.week_number, { year: currentYear, week: currentWeek }));
 
-  for (const w of oldWeeks) {
-    const { count } = await client
-      .from('week_plan')
-      .select('id', { count: 'exact', head: true })
-      .eq('week_id', w.id);
-    if (count === 0) await client.from('weeks').delete().eq('id', w.id);
+  for (const w of pastWeeks) {
+    const { count: planCount } = await client
+      .from('week_plan').select('id', { count: 'exact', head: true }).eq('week_id', w.id);
+    const { count: shoppingCount } = await client
+      .from('shopping_items').select('id', { count: 'exact', head: true }).eq('week_id', w.id);
+
+    if (planCount === 0 && shoppingCount === 0) {
+      await client.from('weeks').delete().eq('id', w.id);
+    } else if (shoppingCount > 0) {
+      await client.from('shopping_items').delete().eq('week_id', w.id);
+      if (planCount === 0) await client.from('weeks').delete().eq('id', w.id);
+    }
   }
 }
 
@@ -143,13 +164,14 @@ function IngredientCard({ item, onToggle }) {
   const [expanded, setExpanded] = useState(false);
   const isChecked = item.checked;
 
-  function toggle() { setExpanded(prev => !prev); }
-
   return (
     <View style={[styles.card, isChecked && styles.cardChecked]}>
       <View style={styles.cardHeader}>
-        <TouchableOpacity onPress={toggle} style={styles.cardLeft} activeOpacity={0.7}>
-          <Text style={styles.cardArrow}>{expanded ? '▾' : '▸'}</Text>
+        <TouchableOpacity onPress={() => setExpanded(p => !p)} style={styles.cardLeft} activeOpacity={0.7}>
+          <Ionicons
+            name={expanded ? 'chevron-down' : 'chevron-forward'}
+            size={14} color="#aaa"
+          />
           <View>
             <Text style={[styles.cardName, isChecked && styles.cardNameChecked]}>
               {item.ingredients.name}
@@ -159,7 +181,6 @@ function IngredientCard({ item, onToggle }) {
             </Text>
           </View>
         </TouchableOpacity>
-
         <TouchableOpacity
           style={[styles.checkbox, isChecked && styles.checkboxChecked]}
           onPress={() => onToggle(item)}
@@ -174,9 +195,7 @@ function IngredientCard({ item, onToggle }) {
           {item.dishes.map((dish, i) => (
             <View key={i} style={styles.dishRow}>
               <Ionicons name="restaurant-outline" size={13} color="#888" />
-              <Text style={[styles.dishName, isChecked && styles.dishNameChecked]}>
-                {dish}
-              </Text>
+              <Text style={[styles.dishName, isChecked && styles.dishNameChecked]}>{dish}</Text>
             </View>
           ))}
         </View>
@@ -186,24 +205,27 @@ function IngredientCard({ item, onToggle }) {
 }
 
 export default function ShoppingScreen() {
+  const current = getWeekNumber(0);
+  const [year, setYear] = useState(current.year);
+  const [week, setWeek] = useState(current.week);
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
+
+  const isCurrentWeek = year === current.year && week === current.week;
 
   const loadShopping = useCallback(async () => {
     setLoading(true);
     try {
       const client = await getClient();
-      const { year, week } = getCurrentWeek();
 
-      const weekId = await fetchCurrentWeekId(client, year, week);
-      if (!weekId) { setItems([]); setLoading(false); return; }
+      await cleanupPastWeeks(client, current.year, current.week);
 
+      const weekId = await fetchOrCreateWeekId(client, year, week);
       const dishIds = await fetchDishIds(client, weekId);
       const ingredientIds = await fetchIngredientIds(client, dishIds);
 
       await syncShoppingItems(client, weekId, ingredientIds);
-      await cleanupPastWeeks(client, weekId);
 
       const enriched = await buildEnrichedItems(client, weekId, dishIds);
       setItems(enriched);
@@ -212,7 +234,7 @@ export default function ShoppingScreen() {
       Alert.alert('Error', 'Could not load shopping list');
     }
     setLoading(false);
-  }, []);
+  }, [year, week]);
 
   useEffect(() => { loadShopping(); }, [loadShopping]);
 
@@ -231,24 +253,27 @@ export default function ShoppingScreen() {
     return () => { if (channel) channel.unsubscribe(); };
   }, [loadShopping]);
 
+  function goToPrevWeek() {
+    if (isPastWeek(year, week - 1 || 52, current)) return;
+    if (week === 1) { setYear(y => y - 1); setWeek(52); }
+    else setWeek(w => w - 1);
+  }
+
+  function goToNextWeek() {
+    if (week === 52) { setYear(y => y + 1); setWeek(1); }
+    else setWeek(w => w + 1);
+  }
+
   async function toggleItem(item) {
     const newChecked = !item.checked;
-
-    setItems(prev => prev.map(i =>
-      i.id === item.id ? { ...i, checked: newChecked } : i
-    ));
-
+    setItems(prev => prev.map(i => i.id === item.id ? { ...i, checked: newChecked } : i));
     try {
       const client = await getClient();
       const { error } = await client
-        .from('shopping_items')
-        .update({ checked: newChecked })
-        .eq('id', item.id);
+        .from('shopping_items').update({ checked: newChecked }).eq('id', item.id);
       if (error) throw error;
     } catch (e) {
-      setItems(prev => prev.map(i =>
-        i.id === item.id ? { ...i, checked: item.checked } : i
-      ));
+      setItems(prev => prev.map(i => i.id === item.id ? { ...i, checked: item.checked } : i));
       Alert.alert('Error', 'Could not update item');
     }
   }
@@ -259,9 +284,7 @@ export default function ShoppingScreen() {
       Alert.alert('Nothing to export', 'All items are already checked.');
       return;
     }
-    const text = pending
-      .map(i => `${i.ingredients.name} x${i.dishes.length}`)
-      .join('\n');
+    const text = pending.map(i => `${i.ingredients.name} x${i.dishes.length}`).join('\n');
     await Clipboard.setStringAsync(text);
     Alert.alert('Copied!', 'Shopping list copied to clipboard.');
   }
@@ -287,6 +310,9 @@ export default function ShoppingScreen() {
     return <IngredientCard item={item} onToggle={toggleItem} />;
   }
 
+  const canGoPrev = !isPastWeek(year, week, current) &&
+    !(year === current.year && week === current.week);
+
   if (loading) {
     return (
       <View style={styles.centered}>
@@ -298,13 +324,39 @@ export default function ShoppingScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>
+        <TouchableOpacity
+          onPress={goToPrevWeek}
+          style={styles.arrowButton}
+          disabled={!canGoPrev}
+        >
+          <Ionicons
+            name="chevron-back"
+            size={22}
+            color={canGoPrev ? '#4CAF50' : '#ddd'}
+          />
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          onPress={() => { setYear(current.year); setWeek(current.week); }}
+          style={styles.weekLabel}
+        >
+          <Text style={styles.weekText}>{getWeekLabel(year, week)}</Text>
+          <Text style={styles.weekBadge}>
+            {isCurrentWeek ? 'this week' : 'tap to go to current week'}
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity onPress={goToNextWeek} style={styles.arrowButton}>
+          <Ionicons name="chevron-forward" size={22} color="#4CAF50" />
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.subHeader}>
+        <Text style={styles.subHeaderTitle}>
           {pending.length} item{pending.length !== 1 ? 's' : ''} left
         </Text>
-        <View style={styles.headerActions}>
-          {syncing && (
-            <ActivityIndicator size="small" color="#4CAF50" style={{ marginRight: 8 }} />
-          )}
+        <View style={styles.subHeaderActions}>
+          {syncing && <ActivityIndicator size="small" color="#4CAF50" style={{ marginRight: 8 }} />}
           <TouchableOpacity onPress={exportToClipboard} style={styles.exportButton}>
             <Ionicons name="copy-outline" size={18} color="#4CAF50" />
             <Text style={styles.exportText}>Copy list</Text>
@@ -316,7 +368,7 @@ export default function ShoppingScreen() {
         <View style={styles.centered}>
           <Text style={styles.emptyTitle}>No ingredients this week</Text>
           <Text style={styles.emptySubtitle}>
-            Assign dishes to the current week to build your shopping list
+            Assign dishes to this week to build your shopping list
           </Text>
         </View>
       ) : (
@@ -345,12 +397,22 @@ const styles = StyleSheet.create({
 
   header: {
     flexDirection: 'row', alignItems: 'center',
+    backgroundColor: 'white', paddingVertical: 10,
+    paddingHorizontal: 12, borderBottomWidth: 1, borderBottomColor: '#eee',
+  },
+  arrowButton: { padding: 6 },
+  weekLabel: { flex: 1, alignItems: 'center' },
+  weekText: { fontSize: 13, fontWeight: '700', color: '#1a1a1a', letterSpacing: 0.3 },
+  weekBadge: { fontSize: 10, color: '#4CAF50', marginTop: 2 },
+
+  subHeader: {
+    flexDirection: 'row', alignItems: 'center',
     justifyContent: 'space-between', backgroundColor: 'white',
-    paddingVertical: 12, paddingHorizontal: 16,
+    paddingVertical: 10, paddingHorizontal: 16,
     borderBottomWidth: 1, borderBottomColor: '#eee',
   },
-  headerTitle: { fontSize: 14, fontWeight: '700', color: '#1a1a1a' },
-  headerActions: { flexDirection: 'row', alignItems: 'center' },
+  subHeaderTitle: { fontSize: 14, fontWeight: '700', color: '#1a1a1a' },
+  subHeaderActions: { flexDirection: 'row', alignItems: 'center' },
   exportButton: {
     flexDirection: 'row', alignItems: 'center', gap: 5,
     paddingVertical: 6, paddingHorizontal: 10,
@@ -367,13 +429,11 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05, shadowRadius: 2, elevation: 1,
   },
   cardChecked: { backgroundColor: '#f4f4f4', shadowOpacity: 0, elevation: 0 },
-
   cardHeader: {
     flexDirection: 'row', alignItems: 'center',
     paddingVertical: 12, paddingHorizontal: 14, gap: 12,
   },
   cardLeft: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 },
-  cardArrow: { fontSize: 14, color: '#aaa' },
   cardName: { fontSize: 15, fontWeight: '600', color: '#1a1a1a' },
   cardNameChecked: {
     color: '#aaa', fontStyle: 'italic',
