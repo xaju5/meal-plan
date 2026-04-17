@@ -6,6 +6,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { getClient } from '../lib/supabase';
+import WeekDishPicker from '../components/WeekDishPicker';
 import { getWeeksAgoLabel, computeWeeksAgo } from '../hooks/useLastUsedLabel';
 
 const DAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
@@ -78,14 +79,9 @@ export default function WeekScreen() {
   const [dishes, setDishes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectingSlot, setSelectingSlot] = useState(null);
-  const [searchQuery, setSearchQuery] = useState('');
 
   const isCurrentWeek = year === current.year && week === current.week;
   const past = isPastWeek(year, week, current);
-
-  const filteredDishes = dishes.filter(d =>
-      d.name.toLowerCase().includes(searchQuery.toLowerCase())
-    );
 
   const loadWeek = useCallback(async () => {
     setLoading(true);
@@ -96,7 +92,6 @@ export default function WeekScreen() {
       client.from('weeks').select('id').eq('year', year).eq('week_number', week).single(),
       client.from('week_plan').select('dish_id, weeks(year, week_number)').not('dish_id', 'is', null)
     ]);
-
     
     const lastUsedMap = {};
     (allWeekPlan || []).forEach(entry => {
@@ -194,6 +189,7 @@ export default function WeekScreen() {
 
   async function handleSelectDish(dish) {
     const { day, slot } = selectingSlot;
+    setSelectingSlot(null);
     const client = await getClient();
     try {
       const id = await getOrCreateWeekId(client);
@@ -207,13 +203,9 @@ export default function WeekScreen() {
           .insert({ week_id: id, day, slot, dish_id: dish.id });
         if (error) throw error;
       }
-      setSelectingSlot(null);
-      setSearchQuery('');
       await loadWeek();
     } catch (e) {
       Alert.alert('Error', `Could not assign dish: ${e.message}`);
-      setSelectingSlot(null);
-      setSearchQuery('');
     }
   }
 
@@ -334,68 +326,12 @@ export default function WeekScreen() {
           })}
         </ScrollView>
       )}
-
-      <Modal visible={!!selectingSlot} transparent animationType="slide">
-        <TouchableWithoutFeedback onPress={() => { setSelectingSlot(null); setSearchQuery(''); }}>
-          <View style={styles.modalOverlay}>
-            <TouchableWithoutFeedback onPress={() => {}}>
-              <View style={styles.modalSheet}>
-                <View style={styles.modalHandle} />
-                <Text style={styles.modalTitle}>Select a dish</Text>
-
-                <View style={styles.searchContainer}>
-                  <Ionicons name="search-outline" size={16} color="#aaa" style={styles.searchIcon} />
-                  <TextInput
-                    style={styles.searchInput}
-                    placeholder="Search dishes..."
-                    value={searchQuery}
-                    onChangeText={setSearchQuery}
-                    autoCorrect={false}
-                  />
-                  {searchQuery !== '' && (
-                    <TouchableOpacity onPress={() => setSearchQuery('')}>
-                      <Ionicons name="close-circle" size={16} color="#aaa" />
-                    </TouchableOpacity>
-                  )}
-                </View>
-
-                <FlatList
-                  data={filteredDishes}
-                  keyExtractor={d => d.id}
-                  keyboardShouldPersistTaps="handled"
-                  ListEmptyComponent={
-                    <Text style={styles.modalEmpty}>
-                      {searchQuery ? 'No dishes match your search' : 'No dishes yet. Add some in the Dishes tab.'}
-                    </Text>
-                  }
-                  renderItem={({ item }) => {
-                    const { text, color } = getWeeksAgoLabel(item.weeksAgo);
-                    return (
-                      <TouchableOpacity
-                        style={styles.modalItem}
-                        onPress={() => handleSelectDish(item)}
-                      >
-                        <View style={styles.modalItemContent}>
-                          <Text style={styles.modalItemText}>{item.name}</Text>
-                          <Text style={[styles.modalItemSub, { color }]}>{text}</Text>
-                        </View>
-                        <Ionicons name="add-circle-outline" size={22} color="#4CAF50" />
-                      </TouchableOpacity>
-                    );
-                  }}
-                />
-
-                <TouchableOpacity
-                  style={styles.modalCancel}
-                  onPress={() => { setSelectingSlot(null); setSearchQuery(''); }}
-                >
-                  <Text style={styles.modalCancelText}>Cancel</Text>
-                </TouchableOpacity>
-              </View>
-            </TouchableWithoutFeedback>
-          </View>
-        </TouchableWithoutFeedback>
-      </Modal>
+      <WeekDishPicker
+        visible={!!selectingSlot}
+        dishes={dishes}
+        onSelect={handleSelectDish}
+        onClose={() => setSelectingSlot(null)}
+      />
     </View>
   );
 }
@@ -487,37 +423,4 @@ const styles = StyleSheet.create({
   slotTextDinner: { color: '#4527a0', fontWeight: '600' },
   slotTextPast: { color: '#999', fontWeight: '500' },
 
-  modalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.35)' },
-  modalSheet: {
-    backgroundColor: 'white', borderTopLeftRadius: 24,
-    borderTopRightRadius: 24, paddingTop: 12,
-    paddingHorizontal: 20, paddingBottom: 32, maxHeight: '70%',
-  },
-  modalHandle: {
-    width: 36, height: 4, borderRadius: 2,
-    backgroundColor: '#e0e0e0', alignSelf: 'center', marginBottom: 16,
-  },
-  modalTitle: { fontSize: 16, fontWeight: '700', color: '#1a1a1a', marginBottom: 12 },
-  modalItem: {
-    flexDirection: 'row', alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#f5f5f5',
-  },
-  modalItemText: { fontSize: 15, color: '#222' },
-  modalEmpty: { color: '#aaa', fontSize: 14, textAlign: 'center', paddingVertical: 32, fontStyle: 'italic' },
-  modalCancel: {
-    marginTop: 8, padding: 14, alignItems: 'center',
-    borderRadius: 10, backgroundColor: '#f5f5f5',
-  },
-  modalCancelText: { fontSize: 15, color: '#888', fontWeight: '600' },
-  searchContainer: {
-    flexDirection: 'row', alignItems: 'center',
-    backgroundColor: '#f5f5f5', borderRadius: 10,
-    paddingHorizontal: 10, marginBottom: 12, gap: 6,
-  },
-  searchIcon: { flexShrink: 0 },
-  searchInput: { flex: 1, paddingVertical: 9, fontSize: 14 },
-  modalItemContent: { flex: 1 },
-  modalItemText: { fontSize: 15, color: '#222' },
-  modalItemSub: { fontSize: 11, marginTop: 2 },
 });
