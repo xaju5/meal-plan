@@ -1,10 +1,13 @@
 import { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, LayoutAnimation } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { getWeeksAgoLabel } from '../hooks/useLastUsedLabel';
+import { useLastUsedLabel } from '../hooks/useLastUsedLabel';
+import { useTranslation } from 'react-i18next';
 
 export default function DishCard({ dish, onEdit, onDelete }) {
+  const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
+  const { getWeeksAgoLabel } = useLastUsedLabel();
   const { text, color } = getWeeksAgoLabel(dish.weeksAgo);
 
   function toggle() {
@@ -36,7 +39,7 @@ export default function DishCard({ dish, onEdit, onDelete }) {
       {expanded && (
         <View style={styles.body}>
           {dish.dish_ingredients.length === 0 ? (
-            <Text style={styles.noIngredients}>No ingredients added</Text>
+            <Text style={styles.noIngredients}>{t('noIngredients')}</Text>
           ) : (
             dish.dish_ingredients.map(di => (
               <View key={di.id} style={styles.ingredientRow}>

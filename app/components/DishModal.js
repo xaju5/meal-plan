@@ -6,8 +6,10 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { getClient } from '../lib/supabase';
 import IngredientAutocomplete from './IngredientAutocomplete';
+import { useTranslation } from 'react-i18next';
 
 export default function DishModal({ visible, dish, onClose }) {
+  const { t } = useTranslation();
   const [name, setName] = useState('');
   const [ingredients, setIngredients] = useState([]);
   const [saving, setSaving] = useState(false);
@@ -44,7 +46,7 @@ export default function DishModal({ visible, dish, onClose }) {
 
   async function handleSave() {
     if (!name.trim()) {
-      Alert.alert('Error', 'Dish name is required');
+      Alert.alert(t('error'), t('dishNameRequired'));
       return;
     }
     setSaving(true);
@@ -103,7 +105,7 @@ export default function DishModal({ visible, dish, onClose }) {
 
       onClose();
     } catch (e) {
-      Alert.alert('Error', `Could not save dish: ${e.message}`);
+      Alert.alert(t('error'), t('couldNotSave', { message: e.message }));
     }
 
     setSaving(false);
@@ -115,18 +117,18 @@ export default function DishModal({ visible, dish, onClose }) {
         <View style={styles.overlay}>
           <TouchableWithoutFeedback onPress={() => {}}>
               <View style={styles.sheet}>
-                <Text style={styles.title}>{dish ? 'Edit dish' : 'New dish'}</Text>
+                <Text style={styles.title}>{dish ? t('editDish') : t('newDish')}</Text>
 
-                <Text style={styles.label}>Dish name</Text>
+                <Text style={styles.label}>{t('dishName')}</Text>
                 <TextInput
                   style={styles.input}
-                  placeholder="e.g. Pasta carbonara"
+                  placeholder={t('dishNamePlaceholder')}
                   value={name}
                   onChangeText={setName}
                   autoFocus
                 />
 
-                <Text style={styles.label}>Ingredients</Text>
+                <Text style={styles.label}>{t('ingredients')}</Text>
                 <IngredientAutocomplete onSelect={handleSelectIngredient} />
 
                 <ScrollView
@@ -134,7 +136,7 @@ export default function DishModal({ visible, dish, onClose }) {
                   keyboardShouldPersistTaps="handled"
                 >
                   {ingredients.length === 0 && (
-                    <Text style={styles.noIngredients}>No ingredients added yet</Text>
+                    <Text style={styles.noIngredients}>{t('noIngredients')}</Text>
                   )}
                   {ingredients.map((ing, index) => (
                     <View key={index} style={styles.tag}>
@@ -152,14 +154,14 @@ export default function DishModal({ visible, dish, onClose }) {
 
                 <View style={styles.footer}>
                   <TouchableOpacity style={styles.cancelButton} onPress={onClose}>
-                    <Text style={styles.cancelText}>Cancel</Text>
+                    <Text style={styles.cancelText}>{t('cancel')}</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={[styles.saveButton, saving && styles.disabled]}
                     onPress={handleSave}
                     disabled={saving}
                   >
-                    <Text style={styles.saveText}>{saving ? 'Saving...' : 'Save'}</Text>
+                    <Text style={styles.saveText}>{saving ? t('saving') : t('save')}</Text>
                   </TouchableOpacity>
                 </View>
               </View>

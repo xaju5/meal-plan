@@ -7,6 +7,7 @@ import { getClient } from '../lib/supabase';
 import DishCard from '../components/DishCard';
 import DishModal from '../components/DishModal';
 import { getWeeksAgoLabel, computeWeeksAgo } from '../hooks/useLastUsedLabel';
+import { useTranslation } from 'react-i18next';
 
 function getCurrentWeek() {
   const d = new Date();
@@ -21,6 +22,7 @@ function getCurrentWeek() {
 
 
 export default function DishesScreen() {
+  const { t } = useTranslation();
   const [dishes, setDishes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [modalVisible, setModalVisible] = useState(false);
@@ -88,12 +90,12 @@ export default function DishesScreen() {
 
   async function handleDelete(dish) {
     Alert.alert(
-      'Delete dish',
-      `Are you sure you want to delete "${dish.name}"?`,
+      t('deleteDish'),
+      t('deleteConfirm', { name: dish.name }),
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: t('cancel'), style: 'cancel' },
         {
-          text: 'Delete',
+          text: t('delete'),
           style: 'destructive',
           onPress: async () => {
             const client = await getClient();
@@ -102,7 +104,7 @@ export default function DishesScreen() {
               .delete()
               .eq('id', dish.id);
             if (error) {
-              Alert.alert('Error', 'Could not delete dish');
+              Alert.alert(t('error'), t('couldNotDelete'));
             } else {
               loadDishes();
             }
@@ -141,7 +143,7 @@ export default function DishesScreen() {
           />
         }
         ListEmptyComponent={
-          <Text style={styles.empty}>No dishes yet. Tap + to add one.</Text>
+          <Text style={styles.empty}>{t('noDishes')}</Text>
         }
         renderItem={({ item }) => (
           <DishCard

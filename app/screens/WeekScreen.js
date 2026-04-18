@@ -9,15 +9,13 @@ import { getClient } from '../lib/supabase';
 import WeekDishPicker from '../components/WeekDishPicker';
 import WeekNavigator from '../components/WeekNavigator';
 import { getWeeksAgoLabel, computeWeeksAgo } from '../hooks/useLastUsedLabel';
+import { useTranslation } from 'react-i18next';
 
 const DAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
-const DAY_LABELS = {
-  monday: 'Mon', tuesday: 'Tue', wednesday: 'Wed',
-  thursday: 'Thu', friday: 'Fri', saturday: 'Sat', sunday: 'Sun'
-};
 const WEEKEND = ['saturday', 'sunday'];
 const LUNCH_SLOTS = ['lunch_first', 'lunch_second'];
 const DINNER_SLOTS = ['dinner_first', 'dinner_second'];
+
 
 function getCurrentWeek() {
   const d = new Date();
@@ -28,16 +26,6 @@ function getCurrentWeek() {
     year: d.getFullYear(),
     week: Math.ceil((((d - yearStart) / 86400000) + 1) / 7)
   };
-}
-
-function getWeekLabel(year, week) {
-  const jan1 = new Date(year, 0, 1);
-  const monday = new Date(jan1);
-  monday.setDate(jan1.getDate() + (week - 1) * 7 - (jan1.getDay() || 7) + 1);
-  const sunday = new Date(monday);
-  sunday.setDate(monday.getDate() + 6);
-  const fmt = d => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
-  return `${fmt(monday)} – ${fmt(sunday)}`;
 }
 
 function isPastWeek(year, week, current) {
@@ -72,6 +60,7 @@ function SlotCell({ entry, onPress, isLunch, isPast }) {
 }
 
 export default function WeekScreen() {
+  const { t } = useTranslation();
   const current = getCurrentWeek();
   const [year, setYear] = useState(current.year);
   const [week, setWeek] = useState(current.week);
@@ -80,6 +69,15 @@ export default function WeekScreen() {
   const [dishes, setDishes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectingSlot, setSelectingSlot] = useState(null);
+  const DAY_LABELS = {
+    monday: t('mon'),
+    tuesday: t('tue'),
+    wednesday: t('wed'),
+    thursday: t('thu'),
+    friday: t('fri'),
+    saturday: t('sat'),
+    sunday: t('sun'),
+  };
 
   const isCurrentWeek = year === current.year && week === current.week;
   const past = isPastWeek(year, week, current);
@@ -168,12 +166,12 @@ export default function WeekScreen() {
     const existing = weekPlan[`${day}_${slot}`];
     if (existing?.dish_id) {
       Alert.alert(
-        'Remove dish',
-        `Remove "${existing.dishes.name}" from this slot?`,
+        t('removeDish'),
+        t('removeConfirm', { name: existing.dishes.name }),
         [
-          { text: 'Cancel', style: 'cancel' },
+          { text: t('cancel'), style: 'cancel' },
           {
-            text: 'Remove', style: 'destructive',
+            text: t('remove'), style: 'destructive',
             onPress: async () => {
               const client = await getClient();
               await client.from('week_plan').delete().eq('id', existing.id);
@@ -206,7 +204,7 @@ export default function WeekScreen() {
       }
       await loadWeek();
     } catch (e) {
-      Alert.alert('Error', `Could not assign dish: ${e.message}`);
+      Alert.alert(t('error'), `Could not assign dish: ${e.message}`);
     }
   }
 
@@ -251,8 +249,8 @@ export default function WeekScreen() {
           <View style={styles.columnHeaders}>
             <View style={styles.dayLabelSpacer} />
             <View style={styles.mealIconSpacer} />
-            <Text style={styles.columnHeader}>1st</Text>
-            <Text style={styles.columnHeader}>2nd</Text>
+            <Text style={styles.columnHeader}>{t('first')}</Text>
+            <Text style={styles.columnHeader}>{t('second')}</Text>
           </View>
 
           {DAYS.map(day => {

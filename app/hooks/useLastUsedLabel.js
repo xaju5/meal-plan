@@ -1,9 +1,17 @@
-export function getWeeksAgoLabel(weeksAgo) {
-  if (weeksAgo === null) return { text: 'never used', color: '#bbb' };
-  if (weeksAgo === 0) return { text: 'this week', color: '#4CAF50' };
-  if (weeksAgo === 1) return { text: '1 week ago', color: '#8bc34a' };
-  if (weeksAgo <= 4) return { text: `${weeksAgo} weeks ago`, color: '#ff9800' };
-  return { text: 'over a month ago', color: '#e53935' };
+import { useTranslation } from 'react-i18next';
+
+export function useLastUsedLabel() {
+  const { t } = useTranslation();
+
+  function getWeeksAgoLabel(weeksAgo) {
+    if (weeksAgo === null) return { text: t('neverUsed'), color: '#bbb' };
+    if (weeksAgo === 0) return { text: t('thisWeek'), color: '#4CAF50' };
+    if (weeksAgo === 1) return { text: t('oneWeekAgo'), color: '#8bc34a' };
+    if (weeksAgo <= 4) return { text: t('weeksAgo', { count: weeksAgo }), color: '#ff9800' };
+    return { text: t('overAMonth'), color: '#e53935' };
+  }
+
+  return { getWeeksAgoLabel };
 }
 
 export function computeWeeksAgo(lastUsedWeek, currentYear, currentWeek) {

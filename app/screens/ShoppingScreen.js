@@ -7,6 +7,8 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import { getClient } from '../lib/supabase';
 import WeekNavigator from '../components/WeekNavigator';
+import IngredientCard from '../components/IngredientCard';
+import { useTranslation } from 'react-i18next';
 
 function getWeekNumber(offsetWeeks = 0) {
   const d = new Date();
@@ -18,16 +20,6 @@ function getWeekNumber(offsetWeeks = 0) {
     year: d.getFullYear(),
     week: Math.ceil((((d - yearStart) / 86400000) + 1) / 7)
   };
-}
-
-function getWeekLabel(year, week) {
-  const jan1 = new Date(year, 0, 1);
-  const monday = new Date(jan1);
-  monday.setDate(jan1.getDate() + (week - 1) * 7 - (jan1.getDay() || 7) + 1);
-  const sunday = new Date(monday);
-  sunday.setDate(monday.getDate() + 6);
-  const fmt = d => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
-  return `${fmt(monday)} – ${fmt(sunday)}`;
 }
 
 function isPastWeek(year, week, current) {
@@ -161,51 +153,8 @@ async function cleanupPastWeeks(client, currentYear, currentWeek) {
   }
 }
 
-function IngredientCard({ item, onToggle }) {
-  const [expanded, setExpanded] = useState(false);
-  const isChecked = item.checked;
-
-  return (
-    <View style={[styles.card, isChecked && styles.cardChecked]}>
-      <View style={styles.cardHeader}>
-        <TouchableOpacity onPress={() => setExpanded(p => !p)} style={styles.cardLeft} activeOpacity={0.7}>
-          <Ionicons
-            name={expanded ? 'chevron-down' : 'chevron-forward'}
-            size={14} color="#aaa"
-          />
-          <View>
-            <Text style={[styles.cardName, isChecked && styles.cardNameChecked]}>
-              {item.ingredients.name}
-            </Text>
-            <Text style={[styles.cardCount, isChecked && styles.cardCountChecked]}>
-              {item.dishes.length} {item.dishes.length === 1 ? 'dish' : 'dishes'} this week
-            </Text>
-          </View>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.checkbox, isChecked && styles.checkboxChecked]}
-          onPress={() => onToggle(item)}
-          activeOpacity={0.7}
-        >
-          {isChecked && <Text style={styles.checkmark}>✓</Text>}
-        </TouchableOpacity>
-      </View>
-
-      {expanded && (
-        <View style={styles.cardBody}>
-          {item.dishes.map((dish, i) => (
-            <View key={i} style={styles.dishRow}>
-              <Ionicons name="restaurant-outline" size={13} color="#888" />
-              <Text style={[styles.dishName, isChecked && styles.dishNameChecked]}>{dish}</Text>
-            </View>
-          ))}
-        </View>
-      )}
-    </View>
-  );
-}
-
 export default function ShoppingScreen() {
+  const { t } = useTranslation();
   const current = getWeekNumber(0);
   const [year, setYear] = useState(current.year);
   const [week, setWeek] = useState(current.week);
@@ -232,7 +181,7 @@ export default function ShoppingScreen() {
       setItems(enriched);
     } catch (e) {
       console.error('loadShopping error:', e.message);
-      Alert.alert('Error', 'Could not load shopping list');
+      Alert.alert(t('error'), t('couldNotLoadShopping'));
     }
     setLoading(false);
   }, [year, week]);
@@ -275,19 +224,19 @@ export default function ShoppingScreen() {
       if (error) throw error;
     } catch (e) {
       setItems(prev => prev.map(i => i.id === item.id ? { ...i, checked: item.checked } : i));
-      Alert.alert('Error', 'Could not update item');
+      Alert.alert(t('error'), t('couldNotUpdate'));
     }
   }
 
   async function exportToClipboard() {
     const pending = items.filter(i => !i.checked);
     if (pending.length === 0) {
-      Alert.alert('Nothing to export', 'All items are already checked.');
+      Alert.alert(t('error'), t('nothingToExport'));
       return;
     }
     const text = pending.map(i => `${i.ingredients.name} x${i.dishes.length}`).join('\n');
     await Clipboard.setStringAsync(text);
-    Alert.alert('Copied!', 'Shopping list copied to clipboard.');
+    Alert.alert(t('copied'), t('listCopied'));
   }
 
   const pending = items.filter(i => !i.checked);
@@ -303,7 +252,7 @@ export default function ShoppingScreen() {
       return (
         <View style={styles.divider}>
           <View style={styles.dividerLine} />
-          <Text style={styles.dividerText}>checked</Text>
+          <Text style={styles.dividerText}>{t('checked')}</Text>
           <View style={styles.dividerLine} />
         </View>
       );
@@ -337,22 +286,22 @@ export default function ShoppingScreen() {
 
       <View style={styles.subHeader}>
         <Text style={styles.subHeaderTitle}>
-          {pending.length} item{pending.length !== 1 ? 's' : ''} left
+          {t('itemsLeft', { count: pending.length.toString() })}
         </Text>
         <View style={styles.subHeaderActions}>
           {syncing && <ActivityIndicator size="small" color="#4CAF50" style={{ marginRight: 8 }} />}
           <TouchableOpacity onPress={exportToClipboard} style={styles.exportButton}>
             <Ionicons name="copy-outline" size={18} color="#4CAF50" />
-            <Text style={styles.exportText}>Copy list</Text>
+            <Text style={styles.exportText}>{t('copyList')}</Text>
           </TouchableOpacity>
         </View>
       </View>
 
       {items.length === 0 ? (
         <View style={styles.centered}>
-          <Text style={styles.emptyTitle}>No ingredients this week</Text>
+          <Text style={styles.emptyTitle}>{t('noIngredientsWeek')}</Text>
           <Text style={styles.emptySubtitle}>
-            Assign dishes to this week to build your shopping list
+            {t('assignDishes')}
           </Text>
         </View>
       ) : (
@@ -395,42 +344,6 @@ const styles = StyleSheet.create({
   exportText: { fontSize: 13, color: '#4CAF50', fontWeight: '600' },
 
   list: { padding: 12, paddingBottom: 32 },
-
-  card: {
-    backgroundColor: 'white', borderRadius: 10,
-    marginBottom: 6, overflow: 'hidden',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05, shadowRadius: 2, elevation: 1,
-  },
-  cardChecked: { backgroundColor: '#f4f4f4', shadowOpacity: 0, elevation: 0 },
-  cardHeader: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingVertical: 12, paddingHorizontal: 14, gap: 12,
-  },
-  cardLeft: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 },
-  cardName: { fontSize: 15, fontWeight: '600', color: '#1a1a1a' },
-  cardNameChecked: {
-    color: '#aaa', fontStyle: 'italic',
-    textDecorationLine: 'line-through', fontWeight: '400',
-  },
-  cardCount: { fontSize: 11, color: '#888', marginTop: 2 },
-  cardCountChecked: { color: '#bbb' },
-
-  checkbox: {
-    width: 22, height: 22, borderRadius: 6,
-    borderWidth: 2, borderColor: '#4CAF50',
-    justifyContent: 'center', alignItems: 'center',
-  },
-  checkboxChecked: { backgroundColor: '#4CAF50', borderColor: '#4CAF50' },
-  checkmark: { fontSize: 13, color: 'white', fontWeight: '700' },
-
-  cardBody: {
-    paddingHorizontal: 16, paddingBottom: 12,
-    borderTopWidth: 1, borderTopColor: '#f0f0f0', gap: 6,
-  },
-  dishRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  dishName: { fontSize: 13, color: '#555' },
-  dishNameChecked: { color: '#bbb', fontStyle: 'italic' },
 
   divider: {
     flexDirection: 'row', alignItems: 'center',

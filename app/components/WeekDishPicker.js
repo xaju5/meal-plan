@@ -4,10 +4,13 @@ import {
   Modal, FlatList, StyleSheet
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { getWeeksAgoLabel } from '../hooks/useLastUsedLabel';
+import { useLastUsedLabel } from '../hooks/useLastUsedLabel';
+import { useTranslation } from 'react-i18next';
 
 export default function WeekDishPicker({ visible, dishes, onSelect, onClose }) {
+  const { t } = useTranslation();
   const [searchQuery, setSearchQuery] = useState('');
+  const { getWeeksAgoLabel } = useLastUsedLabel();
 
   function handleClose() {
     setSearchQuery('');
@@ -30,13 +33,13 @@ export default function WeekDishPicker({ visible, dishes, onSelect, onClose }) {
           <TouchableWithoutFeedback onPress={() => {}}>
             <View style={styles.sheet}>
               <View style={styles.handle} />
-              <Text style={styles.title}>Select a dish</Text>
+              <Text style={styles.title}>{t('selectDish')}</Text>
 
               <View style={styles.searchContainer}>
                 <Ionicons name="search-outline" size={16} color="#aaa" />
                 <TextInput
                   style={styles.searchInput}
-                  placeholder="Search dishes..."
+                  placeholder={t('searchDishes')}
                   value={searchQuery}
                   onChangeText={setSearchQuery}
                   autoCorrect={false}
@@ -55,8 +58,8 @@ export default function WeekDishPicker({ visible, dishes, onSelect, onClose }) {
                 ListEmptyComponent={
                   <Text style={styles.empty}>
                     {searchQuery
-                      ? 'No dishes match your search'
-                      : 'No dishes yet. Add some in the Dishes tab.'}
+                      ? t('noDisheSearch')
+                      : t('noDishesYet')}
                   </Text>
                 }
                 renderItem={({ item }) => {
@@ -77,7 +80,7 @@ export default function WeekDishPicker({ visible, dishes, onSelect, onClose }) {
               />
 
               <TouchableOpacity style={styles.cancelButton} onPress={handleClose}>
-                <Text style={styles.cancelText}>Cancel</Text>
+                <Text style={styles.cancelText}>{t('cancel')}</Text>
               </TouchableOpacity>
             </View>
           </TouchableWithoutFeedback>

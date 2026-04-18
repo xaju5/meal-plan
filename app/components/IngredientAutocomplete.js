@@ -4,8 +4,10 @@ import {
   FlatList, StyleSheet
 } from 'react-native';
 import { getClient } from '../lib/supabase';
+import { useTranslation } from 'react-i18next';
 
 export default function IngredientAutocomplete({ onSelect }) {
+  const { t } = useTranslation();
   const [query, setQuery] = useState('');
   const [suggestions, setSuggestions] = useState([]);
   const [allIngredients, setAllIngredients] = useState([]);
@@ -69,16 +71,16 @@ export default function IngredientAutocomplete({ onSelect }) {
         <TextInput
           ref={inputRef}
           style={styles.input}
-          placeholder="Search or add ingredient..."
+          placeholder={t('searchIngredient')}
           value={query}
           onChangeText={setQuery}
           onSubmitEditing={handleConfirm}
-          returnKeyType="done"
+          returnKeyType={t('done')}
           blurOnSubmit={false}
         />
         {query.trim() !== '' && (
           <TouchableOpacity style={styles.addButton} onPress={handleConfirm}>
-            <Text style={styles.addButtonText}>Add</Text>
+            <Text style={styles.addButtonText}>{t('add')}</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -106,7 +108,7 @@ export default function IngredientAutocomplete({ onSelect }) {
               onPress={handleConfirm}
             >
               <Text style={styles.createText}>
-                Create <Text style={styles.createHighlight}>"{query.trim()}"</Text>
+                {t('createPrefix')} <Text style={styles.createHighlight}>"{query.trim()}"</Text>
               </Text>
             </TouchableOpacity>
           )}
