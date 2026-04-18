@@ -7,6 +7,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { getClient } from '../lib/supabase';
 import WeekDishPicker from '../components/WeekDishPicker';
+import WeekNavigator from '../components/WeekNavigator';
 import { getWeeksAgoLabel, computeWeeksAgo } from '../hooks/useLastUsedLabel';
 
 const DAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
@@ -221,23 +222,15 @@ export default function WeekScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={goToPrevWeek} style={styles.arrowButton}>
-          <Ionicons name="chevron-back" size={22} color="#4CAF50" />
-        </TouchableOpacity>
-        <TouchableOpacity
-          onPress={() => { setYear(current.year); setWeek(current.week); }}
-          style={styles.weekLabel}
-        >
-          <Text style={styles.weekText}>{getWeekLabel(year, week)}</Text>
-          <Text style={styles.weekBadge}>
-            {isCurrentWeek ? 'this week' : 'tap to go to current week'}
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity onPress={goToNextWeek} style={styles.arrowButton}>
-          <Ionicons name="chevron-forward" size={22} color="#4CAF50" />
-        </TouchableOpacity>
-      </View>
+      <WeekNavigator
+        year={year}
+        week={week}
+        currentYear={current.year}
+        currentWeek={current.week}
+        onPrev={goToPrevWeek}
+        onNext={goToNextWeek}
+        onReset={() => { setYear(current.year); setWeek(current.week); }}
+      />
 
       {loading ? (
         <View style={styles.centered}>
@@ -339,17 +332,6 @@ export default function WeekScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f8f9fa' },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-
-  header: {
-    flexDirection: 'row', alignItems: 'center',
-    backgroundColor: 'white', paddingVertical: 10,
-    paddingHorizontal: 12, borderBottomWidth: 1,
-    borderBottomColor: '#eeeeee',
-  },
-  arrowButton: { padding: 6 },
-  weekLabel: { flex: 1, alignItems: 'center' },
-  weekText: { fontSize: 13, fontWeight: '700', color: '#1a1a1a', letterSpacing: 0.3 },
-  weekBadge: { fontSize: 10, color: '#4CAF50', marginTop: 2 },
 
   scroll: { padding: 8, paddingBottom: 16 },
 
