@@ -1,8 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, TouchableWithoutFeedback,
-  StyleSheet, Alert, ActivityIndicator, Modal, FlatList, RefreshControl,
-  TextInput
+  StyleSheet, Alert, ActivityIndicator, Modal, FlatList, RefreshControl
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { getClient } from '../lib/supabase';

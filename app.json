@@ -12,14 +12,15 @@
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
+    "androidStatusBar": {
+      "translucent": false
+    },
     "ios": {
       "supportsTablet": true
     },
     "android": {
       "package": "com.xaju.mealplan",
-      "targetSdkVersion": 34,
       "adaptiveIcon": {
-        "softwareKeyboardLayoutMode": "pan",
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },

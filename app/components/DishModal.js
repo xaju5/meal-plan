@@ -1,18 +1,34 @@
 import { useState, useEffect } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, TouchableWithoutFeedback,
-  Modal, StyleSheet, ScrollView, Alert, KeyboardAvoidingView, Platform
+  Modal, StyleSheet, ScrollView, Alert, Keyboard
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { getClient } from '../lib/supabase';
 import IngredientAutocomplete from './IngredientAutocomplete';
 import { useTranslation } from 'react-i18next';
+import Constants from 'expo-constants';
 
 export default function DishModal({ visible, dish, onClose }) {
   const { t } = useTranslation();
   const [name, setName] = useState('');
   const [ingredients, setIngredients] = useState([]);
   const [saving, setSaving] = useState(false);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+
+  useEffect(() => {
+    if (Constants.appOwnership === 'expo') return;
+    const show = Keyboard.addListener('keyboardDidShow', (e) => {
+      setKeyboardHeight(e.endCoordinates.height);
+    });
+    const hide = Keyboard.addListener('keyboardDidHide', () => {
+      setKeyboardHeight(0);
+    });
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, []);
 
   useEffect(() => {
     if (visible) {
@@ -116,56 +132,56 @@ export default function DishModal({ visible, dish, onClose }) {
       <TouchableWithoutFeedback onPress={onClose}>
         <View style={styles.overlay}>
           <TouchableWithoutFeedback onPress={() => {}}>
-              <View style={styles.sheet}>
-                <Text style={styles.title}>{dish ? t('editDish') : t('newDish')}</Text>
+            <View style={[styles.sheet, { marginBottom: keyboardHeight }]}>
+              <Text style={styles.title}>{dish ? t('editDish') : t('newDish')}</Text>
 
-                <Text style={styles.label}>{t('dishName')}</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder={t('dishNamePlaceholder')}
-                  value={name}
-                  onChangeText={setName}
-                  autoFocus
-                />
+              <Text style={styles.label}>{t('dishName')}</Text>
+              <TextInput
+                style={styles.input}
+                placeholder={t('dishNamePlaceholder')}
+                value={name}
+                onChangeText={setName}
+                autoFocus
+              />
 
-                <Text style={styles.label}>{t('ingredients')}</Text>
-                <IngredientAutocomplete onSelect={handleSelectIngredient} />
+              <Text style={styles.label}>{t('ingredients')}</Text>
+              <IngredientAutocomplete onSelect={handleSelectIngredient} />
 
-                <ScrollView
-                  style={styles.tagList}
-                  keyboardShouldPersistTaps="handled"
+              <ScrollView
+                style={styles.tagList}
+                keyboardShouldPersistTaps="handled"
+              >
+                {ingredients.length === 0 && (
+                  <Text style={styles.noIngredients}>{t('noIngredients')}</Text>
+                )}
+                {ingredients.map((ing, index) => (
+                  <View key={index} style={styles.tag}>
+                    <Text style={styles.tagText}>{ing.name}</Text>
+                    {ing.isNew && <Text style={styles.tagNew}>new</Text>}
+                    <TouchableOpacity
+                      onPress={() => removeIngredient(index)}
+                      style={styles.tagRemove}
+                    >
+                      <Ionicons name="close" size={14} color="#888" />
+                    </TouchableOpacity>
+                  </View>
+                ))}
+              </ScrollView>
+
+              <View style={styles.footer}>
+                <TouchableOpacity style={styles.cancelButton} onPress={onClose}>
+                  <Text style={styles.cancelText}>{t('cancel')}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.saveButton, saving && styles.disabled]}
+                  onPress={handleSave}
+                  disabled={saving}
                 >
-                  {ingredients.length === 0 && (
-                    <Text style={styles.noIngredients}>{t('noIngredients')}</Text>
-                  )}
-                  {ingredients.map((ing, index) => (
-                    <View key={index} style={styles.tag}>
-                      <Text style={styles.tagText}>{ing.name}</Text>
-                      {ing.isNew && <Text style={styles.tagNew}>new</Text>}
-                      <TouchableOpacity
-                        onPress={() => removeIngredient(index)}
-                        style={styles.tagRemove}
-                      >
-                        <Ionicons name="close" size={14} color="#888" />
-                      </TouchableOpacity>
-                    </View>
-                  ))}
-                </ScrollView>
-
-                <View style={styles.footer}>
-                  <TouchableOpacity style={styles.cancelButton} onPress={onClose}>
-                    <Text style={styles.cancelText}>{t('cancel')}</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.saveButton, saving && styles.disabled]}
-                    onPress={handleSave}
-                    disabled={saving}
-                  >
-                    <Text style={styles.saveText}>{saving ? t('saving') : t('save')}</Text>
-                  </TouchableOpacity>
-                </View>
+                  <Text style={styles.saveText}>{saving ? t('saving') : t('save')}</Text>
+                </TouchableOpacity>
               </View>
-              </TouchableWithoutFeedback>
+            </View>
+          </TouchableWithoutFeedback>
         </View>
       </TouchableWithoutFeedback>
     </Modal>

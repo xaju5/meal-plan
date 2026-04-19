@@ -1,16 +1,33 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, TouchableWithoutFeedback,
-  Modal, FlatList, StyleSheet
+  Modal, FlatList, StyleSheet, Keyboard
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useLastUsedLabel } from '../hooks/useLastUsedLabel';
 import { useTranslation } from 'react-i18next';
+import Constants from 'expo-constants';
 
 export default function WeekDishPicker({ visible, dishes, onSelect, onClose }) {
   const { t } = useTranslation();
   const [searchQuery, setSearchQuery] = useState('');
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
   const { getWeeksAgoLabel } = useLastUsedLabel();
+
+  useEffect(() => {
+    if (Constants.appOwnership === 'expo') return;
+
+    const show = Keyboard.addListener('keyboardDidShow', (e) => {
+      setKeyboardHeight(e.endCoordinates.height);
+    });
+    const hide = Keyboard.addListener('keyboardDidHide', () => {
+      setKeyboardHeight(0);
+    });
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, []);
 
   function handleClose() {
     setSearchQuery('');
@@ -31,7 +48,7 @@ export default function WeekDishPicker({ visible, dishes, onSelect, onClose }) {
       <TouchableWithoutFeedback onPress={handleClose}>
         <View style={styles.overlay}>
           <TouchableWithoutFeedback onPress={() => {}}>
-            <View style={styles.sheet}>
+            <View style={[styles.sheet, { marginBottom: keyboardHeight }]}>
               <View style={styles.handle} />
               <Text style={styles.title}>{t('selectDish')}</Text>
 
