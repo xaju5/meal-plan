@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
-  View, Text, FlatList, TouchableOpacity,
+  View, Text, FlatList, ScrollView, TouchableOpacity,
   StyleSheet, ActivityIndicator, Alert, RefreshControl
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -298,12 +298,20 @@ export default function ShoppingScreen() {
       </View>
 
       {items.length === 0 ? (
-        <View style={styles.centered}>
+        <ScrollView
+          contentContainerStyle={styles.emptyContainer}
+          refreshControl={
+            <RefreshControl
+              refreshing={loading}
+              onRefresh={loadShopping}
+              colors={['#4CAF50']}
+              tintColor="#4CAF50"
+            />
+          }
+        >
           <Text style={styles.emptyTitle}>{t('noIngredientsWeek')}</Text>
-          <Text style={styles.emptySubtitle}>
-            {t('assignDishes')}
-          </Text>
-        </View>
+          <Text style={styles.emptySubtitle}>{t('assignDishes')}</Text>
+        </ScrollView>
       ) : (
         <FlatList
           data={listData}
@@ -327,7 +335,8 @@ export default function ShoppingScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f8f9fa' },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32 },
-
+  emptyContainer: {flexGrow: 1, justifyContent: 'center', alignItems: 'center', padding: 32,
+},
   subHeader: {
     flexDirection: 'row', alignItems: 'center',
     justifyContent: 'space-between', backgroundColor: 'white',

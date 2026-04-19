@@ -16,7 +16,10 @@
       "supportsTablet": true
     },
     "android": {
+      "package": "com.xaju.mealplan",
+      "targetSdkVersion": 34,
       "adaptiveIcon": {
+        "softwareKeyboardLayoutMode": "pan",
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
@@ -27,6 +30,11 @@
     },
     "plugins": [
       "expo-localization"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "8c8ee9b5-81eb-4d80-a3e0-a7b676a4886f"
+      }
+    }
   }
 }
