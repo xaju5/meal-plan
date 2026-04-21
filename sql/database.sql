@@ -34,6 +34,6 @@ CREATE TABLE shopping_items (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   week_id UUID NOT NULL REFERENCES weeks(id) ON DELETE CASCADE,
   ingredient_id UUID NOT NULL REFERENCES ingredients(id) ON DELETE CASCADE,
-  checked BOOLEAN DEFAULT false
+  checked BOOLEAN DEFAULT false,
   UNIQUE (week_id, ingredient_id)
 );
